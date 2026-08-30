@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "QuantumSheets"
+version = "0.1.0"
+description = "Musical staff notation for quantum circuits"
+authors = [
+    { name = "Ben Bar" }
+]
+dependencies = [
+    "qiskit",
+    "matplotlib"
+]
+readme = "README.md"
+requires-python = ">=3.8"
+
+[project.scripts]
+quantumsheets = "QuantumSheets.cli:main"
