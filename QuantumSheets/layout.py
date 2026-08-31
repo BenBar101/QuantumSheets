@@ -29,8 +29,8 @@ class GateEvent:
 
 # qiskit instruction name -> pretty label
 _PRETTY = {
-    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": "S$^{\dagger}$",
-    "t": "T", "tdg": "T$^{\dagger}$", "sx": "√X", "sxdg": "√X$^{\dagger}$", "id": "I",
+    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": "S$^{\,\\dagger}$",
+    "t": "T", "tdg": "T$^{\,\\dagger}$", "sx": "√X", "sxdg": "√X$^{\,\\dagger}$", "id": "I",
     "cx": "CNOT", "cy": "CY", "cz": "CZ", "ch": "CH", "swap": "SWAP",
     "ccx": "TOFFOLI", "cswap": "CSWAP", "measure": "MEAS", "barrier": "BARRIER",
     "reset": "RESET",

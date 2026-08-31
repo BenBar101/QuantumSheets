@@ -134,6 +134,12 @@ def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
             facecolor=bg, edgecolor=bg, linewidth=0, zorder=9,
         )
         ax.add_patch(e_in)
+    elif kind == "x_note":
+        # Draw a thick 'x' cross
+        hx = NOTE_W * 0.4
+        hy = NOTE_H * 0.5
+        ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
+        ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
     else:
         e = mpatches.Ellipse(
             (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
@@ -142,12 +148,11 @@ def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
         ax.add_patch(e)
 
 
-def _draw_stem(ax, x, y_bottom, y_top, ink="#1a1a1a"):
+def _draw_stem(ax, stem_x, y_bottom, y_top, ink="#1a1a1a"):
     """Draw a thick stem from y_bottom to y_top on the right edge of the notehead."""
     import matplotlib.patches as patches
     stem_w = 0.04  # exact data width for perfect alignment
-    stem_x = x + STEM_X_OFFSET
-    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom - 0.05), stem_w, y_top - y_bottom + 0.05,
+    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom + 0.06), stem_w, y_top - (y_bottom + 0.06),
                              facecolor=ink, edgecolor='none', zorder=7)
     ax.add_patch(rect)
 
@@ -157,14 +162,14 @@ def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
     import matplotlib.patches as patches
     
     verts = [
-        (0.02, 0.0),       # 1. Start at top right of stem
-        (0.8, 0.5),        # 2. Control point outer curve top (sloping down and out)
-        (1.1, 1.8),        # 3. Control point outer curve bottom
-        (0.15, 3.2),       # 4. Tip of the flag curling down/in (very sharp point)
-        (0.8, 2.0),        # 5. Control point inner curve bottom
-        (0.15, 1.0),       # 6. Control point inner curve top
-        (0.02, 0.8),       # 7. End attached to stem lower down
-        (0.02, 0.0),       # Close poly
+        (0.0, 0.0),            # Start at top-right of stem
+        (0.9, 0.2),            # Thick curved top
+        (1.5, -1.2),           # Outer swoosh edge
+        (0.2, -2.5),           # Sharp inward point
+        (1.2, -1.2),           # Inner upward curve
+        (0.4, -0.6),           # Thickening inner curve
+        (0.0, -1.2),           # Re-attach to stem
+        (0.0, 0.0)             # Close path
     ]
     
     codes = [
@@ -174,11 +179,8 @@ def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
         Path.CLOSEPOLY
     ]
     
-    # Scale and translate
-    # The stem goes UP, meaning stem_top is a smaller number.
-    # So the flag should extend DOWN (positive y offset)
     # Scale factors carefully tuned to fit the stem length
-    scaled_verts = [(stem_x + vx * 0.4, stem_top - vy * 0.4) for vx, vy in verts]
+    scaled_verts = [(stem_x + vx * 0.4, stem_top + vy * 0.4) for vx, vy in verts]
     path = Path(scaled_verts, codes)
     patch = patches.PathPatch(path, facecolor=ink, edgecolor='none', zorder=8)
     ax.add_patch(patch)
@@ -341,9 +343,10 @@ class StaffCircuitDrawer:
 
         if stem and kind not in ("whole",):
             stem_top = y + STEM_LEN
-            _draw_stem(ax, x, y, stem_top, ink=ink)
+            stem_x = x + (0.26 if kind == "whole" else (0.22 if kind == "x_note" else STEM_X_OFFSET))
+            _draw_stem(ax, stem_x, y, stem_top, ink=ink)
             if flag:
-                _draw_flag(ax, x + STEM_X_OFFSET, stem_top, ink=ink)
+                _draw_flag(ax, stem_x, stem_top, ink=ink)
 
         if gate_label:
             # Place label to the right of the note, slightly closer
@@ -390,7 +393,10 @@ class StaffCircuitDrawer:
         # Draw all noteheads, their ledger lines, and individual stems
         for i, (q, y_note, kind) in enumerate(notes):
             x_note = x + i * NOTE_W * 1.5
-            stem_xs.append(x_note + STEM_X_OFFSET)
+            
+            stem_offset = 0.26 if kind == "whole" else (0.20 if kind == "x_note" else STEM_X_OFFSET)
+            stem_x = x_note + stem_offset
+            stem_xs.append(stem_x)
 
             top_line = self._staff_top_y(q, sys_idx)
             bot_line = self._staff_bottom_y(q, sys_idx)
@@ -407,7 +413,7 @@ class StaffCircuitDrawer:
                     cur_y -= LINE_SPACING
 
             _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"])
-            _draw_stem(ax, x_note, y_note, stem_top, ink=ink)
+            _draw_stem(ax, stem_x, y_note, stem_top, ink=ink)
 
         # Draw horizontal beam connecting all stems at the top
         if len(stem_xs) > 1:
@@ -428,15 +434,15 @@ class StaffCircuitDrawer:
                 params = "(" + params
                 
                 # Base on the left, closer to beam
-                self._text(ax, cx - 0.01, stem_top + LINE_SPACING * 0.1, base,
+                self._text(ax, cx - 0.01, stem_top + LINE_SPACING * 0.02, base,
                            size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
                            ha="right", va="bottom")
                 # Params on the right, same height
-                self._text(ax, cx + 0.01, stem_top + LINE_SPACING * 0.1, params,
+                self._text(ax, cx + 0.01, stem_top + LINE_SPACING * 0.02, params,
                            size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
                            ha="left", va="bottom")
             else:
-                self._text(ax, cx, stem_top + LINE_SPACING * 0.1, label,
+                self._text(ax, cx, stem_top + LINE_SPACING * 0.02, label,
                            size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
                            ha="center", va="bottom")
 
@@ -464,13 +470,37 @@ class StaffCircuitDrawer:
         bot = self._staff_bottom_y(qubit, sys_idx)
         mid = self._mid_y(qubit, sys_idx)
         
-        # 'q' exactly between the top line and middle line
-        # Place 'q' such that its descender sits just above the middle line
-        self._text(ax, QLABEL_X, top - LINE_SPACING * 1.0,
-                   "q", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
-        # Place the number such that it sits between the bottom two lines
-        self._text(ax, QLABEL_X, bot + LINE_SPACING * 1.0,
-                   f"{qubit}", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
+        from matplotlib.textpath import TextPath
+        from matplotlib.transforms import Affine2D
+        import matplotlib.patches as patches
+
+        # 'q' in the top two spaces (between top line and middle line)
+        # Using serif font to look like time signature
+        path_q = TextPath((0, 0), "q", size=1, prop={'family': 'serif', 'weight': 'bold', 'style': 'italic'})
+        bbox_q = path_q.get_extents()
+        
+        # Scale height exactly to 2 * LINE_SPACING (the top two spaces)
+        scale_q = (2.0 * LINE_SPACING) / bbox_q.height
+        # Shift down from top line
+        offset_y_q = (top - 2.0 * LINE_SPACING) - (bbox_q.y0 * scale_q)
+        # Center horizontally at QLABEL_X
+        offset_x_q = QLABEL_X - (bbox_q.x0 + bbox_q.width / 2.0) * scale_q
+        
+        transform_q = Affine2D().scale(scale_q).translate(offset_x_q, offset_y_q)
+        patch_q = patches.PathPatch(path_q, transform=transform_q + ax.transData, facecolor=ink, lw=0, zorder=10)
+        ax.add_patch(patch_q)
+
+        # Qubit number in the bottom two spaces
+        path_n = TextPath((0, 0), str(qubit), size=1, prop={'family': 'serif', 'weight': 'bold'})
+        bbox_n = path_n.get_extents()
+        
+        scale_n = (2.0 * LINE_SPACING) / bbox_n.height
+        offset_y_n = bot - (bbox_n.y0 * scale_n)
+        offset_x_n = QLABEL_X - (bbox_n.x0 + bbox_n.width / 2.0) * scale_n
+        
+        transform_n = Affine2D().scale(scale_n).translate(offset_x_n, offset_y_n)
+        patch_n = patches.PathPatch(path_n, transform=transform_n + ax.transData, facecolor=ink, lw=0, zorder=10)
+        ax.add_patch(patch_n)
 
     def _draw_barlines(self, ax, sys_idx):
         """Draw all vertical barlines spanning exactly from the top staff line
@@ -528,7 +558,7 @@ class StaffCircuitDrawer:
 
         if ev.kind == "swap":
             qubits = sorted([ev.targets[0], ev.targets[1]])
-            self._chord(ax, x, qubits, sys_idx, kinds=["whole", "whole"], label="SWAP")
+            self._chord(ax, x, qubits, sys_idx, kinds=["x_note", "x_note"], label="SWAP")
             return
 
         if ev.kind == "control":
@@ -549,7 +579,7 @@ class StaffCircuitDrawer:
                     kinds.append("whole")
                     offsets.append(0.0) # control note is usually at 0.0 offset (mid line)
                 else:
-                    kinds.append("black")
+                    kinds.append("x_note" if "swap" in ev.name else "black")
                     offsets.append(target_off)
             self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, label=ev.label)
             return
@@ -562,7 +592,8 @@ class StaffCircuitDrawer:
         
         all_q = sorted(ev.qubits)
         offsets = [target_off] * len(all_q)
-        self._chord(ax, x, all_q, sys_idx, kinds=["black"] * len(all_q), offsets=offsets, label=ev.label)
+        target_kind = "x_note" if "swap" in ev.name else "black"
+        self._chord(ax, x, all_q, sys_idx, kinds=[target_kind] * len(all_q), offsets=offsets, label=ev.label)
 
     # ---------- public entry point ----------
     def draw(self, figsize=None, dpi=170):
