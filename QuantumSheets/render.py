@@ -473,9 +473,9 @@ class StaffCircuitDrawer:
         y_top = self._global_staff_top(sys_idx)
         y_bot = self._global_staff_bottom(sys_idx)
 
-        # Left vertical closing bar
+        # Common vertical bar spanning all staves at the left margin
         ax.plot([LEFT_BAR_X, LEFT_BAR_X], [y_top, y_bot],
-                color=ink, lw=1.8, zorder=2)
+                color=ink, lw=1.8, solid_capstyle="butt", zorder=2)
 
         # Barrier barlines (drawn as dashed lines so they are clearly barriers, not standard barlines)
         for bx in self._barrier_barline_xs(sys_idx):
@@ -488,7 +488,7 @@ class StaffCircuitDrawer:
         if is_final_system:
             # Thick double barline only at the very end of the circuit
             ax.plot([fx - 0.3, fx - 0.3], [y_top, y_bot], color=ink, lw=1.2, zorder=2)
-            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=5.0, zorder=2)
+            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=5.0, solid_capstyle="butt", zorder=2)
         else:
             ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=1.0, zorder=2)
 
