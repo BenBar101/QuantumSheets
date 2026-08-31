@@ -466,10 +466,10 @@ class StaffCircuitDrawer:
         
         # 'q' exactly between the top line and middle line
         # Place 'q' such that its descender sits just above the middle line
-        self._text(ax, QLABEL_X, top + LINE_SPACING * 0.6,
+        self._text(ax, QLABEL_X, top - LINE_SPACING * 1.0,
                    "q", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
         # Place the number such that it sits between the bottom two lines
-        self._text(ax, QLABEL_X, bot - LINE_SPACING * 0.6,
+        self._text(ax, QLABEL_X, bot + LINE_SPACING * 1.0,
                    f"{qubit}", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
 
     def _draw_barlines(self, ax, sys_idx):
