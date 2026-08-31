@@ -34,7 +34,7 @@ STYLES = {
 LINE_SPACING    = 0.55          # tight lines, like real sheet music
 N_LINES         = 5
 STAFF_HEIGHT    = (N_LINES - 1) * LINE_SPACING
-STAFF_GAP       = 1.8           # gap between staves
+STAFF_GAP       = 1.53          # gap between staves
 DX              = 3.0           # horizontal step per moment column (increased for label room)
 BARRIER_GAP     = 1.0           # extra gap at barrier barlines
 X_START         = 5.4           # room for left-bar + clef + time-sig
@@ -474,9 +474,8 @@ class StaffCircuitDrawer:
         from matplotlib.transforms import Affine2D
         import matplotlib.patches as patches
 
-        # 'q' in the top two spaces (between top line and middle line)
-        # Using default bold sans-serif font like normal text
-        path_q = TextPath((0, 0), "q", size=1, prop={'weight': 'bold'})
+        # Using serif font to look like time signature, but straight (not italic)
+        path_q = TextPath((0, 0), "q", size=1, prop={'family': 'serif', 'weight': 'bold'})
         bbox_q = path_q.get_extents()
         
         # Scale height exactly to 2 * LINE_SPACING (the top two spaces)
@@ -490,7 +489,7 @@ class StaffCircuitDrawer:
         ax.add_patch(patch_q)
 
         # Qubit number in the bottom two spaces
-        path_n = TextPath((0, 0), str(qubit), size=1, prop={'weight': 'bold'})
+        path_n = TextPath((0, 0), str(qubit), size=1, prop={'family': 'serif', 'weight': 'bold'})
         bbox_n = path_n.get_extents()
         
         scale_n = (2.0 * LINE_SPACING) / bbox_n.height
@@ -517,9 +516,9 @@ class StaffCircuitDrawer:
         ax.plot([LEFT_BAR_X, LEFT_BAR_X], [y_top_ext, y_bot_ext],
                 color=ink, lw=1.8, solid_capstyle="butt", zorder=2)
 
-        # Barrier barlines (drawn as dashed lines so they are clearly barriers, not standard barlines)
+        # Barrier barlines (drawn as solid lines like classical barlines)
         for bx in self._barrier_barline_xs(sys_idx):
-            ax.plot([bx, bx], [y_top, y_bot], color=ink, lw=1.4, linestyle="--", zorder=2)
+            ax.plot([bx, bx], [y_top, y_bot], color=ink, lw=1.4, zorder=2)
 
         # Closing barline at right end
         fx = self.system_end_x[sys_idx]
