@@ -29,8 +29,8 @@ class GateEvent:
 
 # qiskit instruction name -> pretty label
 _PRETTY = {
-    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": "S†",
-    "t": "T", "tdg": "T†", "sx": "√X", "sxdg": "√X†", "id": "I",
+    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": "S$^{\dagger}$",
+    "t": "T", "tdg": "T$^{\dagger}$", "sx": "√X", "sxdg": "√X$^{\dagger}$", "id": "I",
     "cx": "CNOT", "cy": "CY", "cz": "CZ", "ch": "CH", "swap": "SWAP",
     "ccx": "TOFFOLI", "cswap": "CSWAP", "measure": "MEAS", "barrier": "BARRIER",
     "reset": "RESET",
@@ -38,15 +38,43 @@ _PRETTY = {
 
 _PARAM_GATES = {"rx", "ry", "rz", "p", "u", "u1", "u2", "u3", "crx", "cry", "crz", "cp", "cu"}
 
+import math
+
+def _fmt_one_param(p):
+    """Format a single parameter, using π notation when possible."""
+    try:
+        val = float(p)
+    except (TypeError, ValueError):
+        return str(p)
+
+    if val == 0:
+        return "0"
+
+    # Try to express as a rational multiple of π: val ≈ (n/d)·π
+    ratio = val / math.pi
+    # Check simple fractions: n/d for d in 1..12
+    for denom in range(1, 13):
+        numer = round(ratio * denom)
+        if abs(numer / denom - ratio) < 1e-6 and numer != 0:
+            if denom == 1:
+                if numer == 1:
+                    return "π"
+                if numer == -1:
+                    return "-π"
+                return f"{numer}π"
+            else:
+                sign = "-" if numer < 0 else ""
+                numer = abs(numer)
+                if numer == 1:
+                    return f"{sign}π/{denom}"
+                return f"{sign}{numer}π/{denom}"
+
+    # Fallback to decimal
+    return f"{val:.2f}"
+
 
 def _fmt_params(params):
-    out = []
-    for p in params:
-        try:
-            out.append(f"{float(p):.2f}")
-        except (TypeError, ValueError):
-            out.append(str(p))
-    return ",".join(out)
+    return ",".join(_fmt_one_param(p) for p in params)
 
 
 def _pretty_label(name, params):

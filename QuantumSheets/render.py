@@ -2,382 +2,609 @@
 render.py
 ---------
 Draws a qiskit QuantumCircuit as a "musical staff" diagram: one 5-line
-staff per qubit, a real treble-clef glyph, filled/hollow noteheads with
-stems for gates, an X-notehead for measurements, a proper circle-plus
-target for CNOT, crossing lines for SWAP, and a text label under (or
-beside) every symbol naming exactly which gate it is -- so it looks like
-sheet music but reads like a circuit diagram.
+staff per qubit, a real treble-clef glyph, actual note shapes for
+gates, with proper classical-music typography.
+
+Notes are drawn as vector shapes (matplotlib Ellipse patches) so they
+look crisp at any resolution.  Control qubits render as whole notes,
+target qubits as filled (black) notes, SWAP as whole-note chords,
+and measurements use a long-rest bar with "M" on top.
 """
 import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-from matplotlib.patches import Circle, Ellipse, FancyBboxPatch
-from matplotlib.path import Path
+import matplotlib.image as mpimg
 import matplotlib.patches as mpatches
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 from .layout import circuit_to_moments, GateEvent
 from .brace import draw_vertical_brace
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_FONT_PATH = os.path.join(_HERE, "Euterpe.ttf")
-
-# Candidate music-symbol fonts in preference order
-_FALLBACK_FONTS = [
-    "/System/Library/Fonts/Apple Symbols.ttf",   # macOS
-    "/usr/share/fonts/truetype/noto/NotoMusic-Regular.ttf",  # Linux (Noto)
-]
-
-# Musical Symbols block -- see glyph catalogue.
-GLYPH = {
-    "gclef": "\U0001D11E",
-    "barline": "\U0001D100",
-    "final_barline": "\U0001D102",
-    "notehead_black": "\U0001D158",
-    "notehead_white": "\U0001D157",
-    "x_notehead": "\U0001D143",
-}
+_CLEF_PATH = os.path.join(_HERE, "clef.png")
 
 STYLES = {
-    "ink": dict(bg="#efe4c9", ink="#1f4d36", accent="#c99a2e", paper_edge="#d8c79f"),
+    "ink":   dict(bg="#efe4c9", ink="#1a1a1a", accent="#c99a2e", paper_edge="#d8c79f"),
     "clean": dict(bg="#ffffff", ink="#1a1a1a", accent="#b8860b", paper_edge="#ffffff"),
 }
 
 # ── Geometry ──────────────────────────────────────────────────────────
-# All units are "staff units": 1 unit = distance between two staff lines
-LINE_SPACING = 0.55          # ← tighter lines, like real sheet music
-N_LINES = 5
-STAFF_HEIGHT = (N_LINES - 1) * LINE_SPACING
-STAFF_GAP = 1.8              # ← closer staves (was 3.4)
-DX = 2.0                     # horizontal step per moment column
-MEASURE_GAP = 0.8
-X_START = 4.0
-LEFT_LABEL_X = 1.5
-CLEF_X = 2.35
-BRACE_X = 0.45
+LINE_SPACING    = 0.55          # tight lines, like real sheet music
+N_LINES         = 5
+STAFF_HEIGHT    = (N_LINES - 1) * LINE_SPACING
+STAFF_GAP       = 1.8           # gap between staves
+DX              = 3.0           # horizontal step per moment column (increased for label room)
+BARRIER_GAP     = 1.0           # extra gap at barrier barlines
+X_START         = 5.4           # room for left-bar + clef + time-sig
+CLEF_X          = 2.2           # clef close to the left vertical bar
+QLABEL_X        = 3.6           # q-label (time signature) after clef
+BRACE_X         = 1.25
+LEFT_BAR_X      = 1.4           # vertical closing line at far left
 
-# Note stem length (in staff units)
-STEM_LEN = 2.0
+# Note geometry – properly proportioned, tilted noteheads
+NOTE_W          = 0.55          # width of notehead ellipse (data units)
+NOTE_H          = 0.40          # height of notehead ellipse
+NOTE_TILT       = -18           # degrees – real noteheads tilt slightly
+HALF_LW         = 2.2           # stroke width for half-note ring
+WHOLE_W         = 0.56          # whole note width
+WHOLE_H         = 0.40
+WHOLE_LW        = 2.8           # thicker stroke so whole notes look full
+WHOLE_INNER_W   = 0.26          # inner ellipse to create the classic "double-ring" whole note look
+WHOLE_INNER_H   = 0.30
 
-# deterministic small pitch variety for single-qubit gates (purely decorative;
-# which STAFF a note sits on -- not its height -- is what carries meaning)
-_PITCH_OFFSET = {
-    "h": 0.3, "x": -0.3, "y": 0.6, "z": -0.6, "s": 0.6, "sdg": -0.6,
-    "t": 0.0, "tdg": 0.0, "sx": 0.3, "sxdg": -0.3, "id": 0.0, "reset": -0.6,
+STEM_X_OFFSET   = NOTE_W * 0.45  # right edge of notehead
+STEM_LW         = 2.5           # stem thickness (thick like real notes)
+STEM_LEN        = 3.0 * LINE_SPACING  # stem length
+
+GATE_LABEL_SIZE = 28            # font size for gate labels (bigger)
+QLABEL_SIZE     = 92            # qubit label size – fills the staff top to bottom
+
+# ── Solfège pitch mapping ─────────────────────────────────────────────
+_SOLFEGE = {
+    # ── standard gates ──
+    "h":      +2.5,     # space above top line
+    "x":      +2.0,     # top line
+    "sx":     +1.5,     # space below top line
+    "sxdg":   +1.5,
+    "y":      +1.0,     # 2nd line from top
+    "id":      0.0,     # middle line
+    "z":      -1.0,     # 2nd line from bottom
+    "s":      -2.0,     # bottom line
+    "sdg":    -2.0,
+    "t":      -3.0,     # ledger line below bottom
+    "tdg":    -3.0,
+    "reset":  -4.0,     # double ledger line below
+
+    # ── parameterised single-qubit gates ──
+    "rx":     +0.5,     # space above middle line
+    "ry":     -0.5,     # space below middle line
+    "rz":     -1.5,     # space above bottom line
+    "p":      -2.5,     # space below bottom line
+    
+    "u1":     +3.0,     # ledger line above top
+    "u2":     +3.5,     # space above ledger line
+    "u3":     +4.0,     # double ledger line above
 }
 
-_MUSIC_FONT_PROP = None  # cached after first call
+def _get_offset_for_name(name: str) -> float:
+    if name in _SOLFEGE:
+        return _SOLFEGE[name]
+    if name.startswith("r"):
+        return +1.0
+    return 0.0
+
+def _solfege_offset(ev: GateEvent) -> float:
+    return _get_offset_for_name(ev.name)
+
+# ── Helper: draw a notehead patch ────────────────────────────────────
+
+def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
+    """
+    Draw a single notehead centred at (x, y).
+
+    kind:
+        "black" – filled (quarter-note style)
+        "half"  – open ring  (half-note style)
+        "whole" – filled ring with inner counter cutout, classic whole-note look
+    """
+    if kind == "black":
+        e = mpatches.Ellipse(
+            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
+            facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
+        )
+        ax.add_patch(e)
+    elif kind == "half":
+        e = mpatches.Ellipse(
+            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
+            facecolor="none", edgecolor=ink, linewidth=HALF_LW, zorder=8,
+        )
+        ax.add_patch(e)
+    elif kind == "whole":
+        # Outer filled ellipse
+        e_out = mpatches.Ellipse(
+            (x, y), WHOLE_W, WHOLE_H, angle=0,
+            facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
+        )
+        ax.add_patch(e_out)
+        # Inner cutout (background colour)
+        e_in = mpatches.Ellipse(
+            (x, y), WHOLE_INNER_W, WHOLE_INNER_H, angle=35,
+            facecolor=bg, edgecolor=bg, linewidth=0, zorder=9,
+        )
+        ax.add_patch(e_in)
+    else:
+        e = mpatches.Ellipse(
+            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
+            facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
+        )
+        ax.add_patch(e)
 
 
-def _music_font():
-    """Return a FontProperties that can render music-symbol glyphs, or None."""
-    global _MUSIC_FONT_PROP
-    if _MUSIC_FONT_PROP is not None:
-        return _MUSIC_FONT_PROP if _MUSIC_FONT_PROP != "NONE" else None
+def _draw_stem(ax, x, y_bottom, y_top, ink="#1a1a1a"):
+    """Draw a thick stem from y_bottom to y_top on the right edge of the notehead."""
+    import matplotlib.patches as patches
+    stem_w = 0.04  # exact data width for perfect alignment
+    stem_x = x + STEM_X_OFFSET
+    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom), stem_w, y_top - y_bottom,
+                             facecolor=ink, edgecolor='none', zorder=7)
+    ax.add_patch(rect)
 
-    candidates = [_FONT_PATH] + _FALLBACK_FONTS
-    for path in candidates:
-        if os.path.isfile(path):
-            try:
-                fm.fontManager.addfont(path)
-                _MUSIC_FONT_PROP = fm.FontProperties(fname=path)
-                return _MUSIC_FONT_PROP
-            except Exception:
-                continue
-    # No music font found — callers will draw a text fallback.
-    _MUSIC_FONT_PROP = "NONE"
-    return None
+def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
+    """Draw a classical eighth-note flag curving down from the top of the stem."""
+    from matplotlib.path import Path
+    import matplotlib.patches as patches
+    w = NOTE_W * 1.0
+    h = LINE_SPACING * 2.8
+    
+    verts = [
+        (stem_x, stem_top),                             # Start
+        (stem_x + w * 1.0, stem_top - h * 0.1),         # CP 1
+        (stem_x + w * 1.1, stem_top - h * 0.6),         # CP 2
+        (stem_x + w * 0.5, stem_top - h * 0.95),        # End 1 (tip)
+        
+        (stem_x + w * 0.6, stem_top - h * 0.6),         # CP 3
+        (stem_x + w * 0.4, stem_top - h * 0.3),         # CP 4
+        (stem_x, stem_top - h * 0.35),                  # End 2 (on stem)
+    ]
+    codes = [
+        Path.MOVETO,
+        Path.CURVE4, Path.CURVE4, Path.CURVE4,
+        Path.CURVE4, Path.CURVE4, Path.CURVE4,
+    ]
+    path = Path(verts, codes)
+    patch = patches.PathPatch(path, facecolor=ink, edgecolor='none', zorder=8)
+    ax.add_patch(patch)
 
+def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
+    """
+    Draw a measurement symbol: a wide, short black rectangle (like the
+    classical long-rest / breve-rest bar) with bold 'M' above it.
+    """
+    bar_w = 0.85   # wide
+    bar_h = LINE_SPACING * 0.50  # short – ratio makes it look like a long rest
+    rect = mpatches.FancyBboxPatch(
+        (x - bar_w / 2, y - bar_h / 2), bar_w, bar_h,
+        boxstyle="square,pad=0", facecolor=ink, edgecolor=ink,
+        linewidth=0.5, zorder=8,
+    )
+    ax.add_patch(rect)
 
-def _pitch_offset(ev: GateEvent) -> float:
-    if ev.name in _PITCH_OFFSET:
-        return _PITCH_OFFSET[ev.name]
-    return 0.4 if (hash(ev.name) % 2 == 0) else -0.4
+    # Bold "M" above the bar
+    ax.text(x, y + bar_h / 2 + LINE_SPACING * 0.25, "M",
+            fontsize=GATE_LABEL_SIZE + 2, weight="bold", family="DejaVu Serif",
+            ha="center", va="bottom", color=ink, zorder=9)
 
 
 class StaffCircuitDrawer:
-    def __init__(self, qc, style="clean", gates_per_measure=3, title=None):
+    def __init__(self, qc, style="clean", max_cols_per_system=12, title=None):
         self.qc = qc
         self.n_qubits = qc.num_qubits
         self.style = STYLES[style]
-        self.gates_per_measure = max(1, gates_per_measure)
+        self.max_cols_per_system = max(1, max_cols_per_system)
         self.title = title
-        self.music_prop = _music_font()
         self.moments = circuit_to_moments(qc)
         self.n_cols = len(self.moments)
+        
+        # Split moments into multi-system lines
+        self.systems = []
+        for i in range(0, self.n_cols, self.max_cols_per_system):
+            self.systems.append(self.moments[i:i+self.max_cols_per_system])
+            
+        if not self.systems:
+            self.systems = [[]]
 
-        self.xs = self._compute_column_xs()
-        self.end_x = (self.xs[-1] if self.xs else X_START) + DX * 0.6 + 0.6
+        # Identify barrier columns globally
+        self._barrier_cols = set()
+        for col_idx, moment in enumerate(self.moments):
+            if any(ev.kind == "barrier" for ev in moment):
+                self._barrier_cols.add(col_idx)
+
+        self._compute_system_xs()
+        self.clef_img = mpimg.imread(_CLEF_PATH)
 
     # ---------- geometry helpers ----------
-    def _compute_column_xs(self):
-        xs = []
-        x = X_START
-        for c in range(self.n_cols):
-            if c > 0 and c % self.gates_per_measure == 0:
-                x += MEASURE_GAP
-            xs.append(x)
-            x += DX
-        return xs
+    def _compute_system_xs(self):
+        self.system_xs = []
+        self.system_end_x = []
+        
+        for sys_idx, sys_moments in enumerate(self.systems):
+            xs = []
+            x = X_START
+            for i, moment in enumerate(sys_moments):
+                global_c = sys_idx * self.max_cols_per_system + i
+                if i > 0 and global_c in self._barrier_cols:
+                    x += BARRIER_GAP
+                xs.append(x)
+                x += DX
+            
+            # The final barline is drawn further to the right to clear any beamed chords
+            end_x = (xs[-1] if xs else X_START) + DX * 1.3
+            self.system_xs.append(xs)
+            self.system_end_x.append(end_x)
 
-    def _staff_top_y(self, qubit: int) -> float:
-        # qubit 0 = top staff
-        return -qubit * (STAFF_HEIGHT + STAFF_GAP)
+    def _sys_offset_y(self, sys_idx: int) -> float:
+        # Each system takes up space for all qubits plus top/bottom padding
+        pad_top = 3.0
+        pad_bot = 2.0
+        height_per_qubit = (STAFF_HEIGHT + STAFF_GAP)
+        sys_height = self.n_qubits * height_per_qubit + pad_top + pad_bot
+        return -sys_idx * sys_height
 
-    def _mid_y(self, qubit: int) -> float:
-        return self._staff_top_y(qubit) - (N_LINES // 2) * LINE_SPACING
+    def _staff_top_y(self, qubit: int, sys_idx: int) -> float:
+        return self._sys_offset_y(sys_idx) - qubit * (STAFF_HEIGHT + STAFF_GAP)
 
-    def _y_of(self, qubit: int, offset: float = 0.0) -> float:
-        return self._mid_y(qubit) + offset * LINE_SPACING
+    def _staff_bottom_y(self, qubit: int, sys_idx: int) -> float:
+        return self._staff_top_y(qubit, sys_idx) - STAFF_HEIGHT
 
-    def _measure_barline_xs(self):
+    def _mid_y(self, qubit: int, sys_idx: int) -> float:
+        return self._staff_top_y(qubit, sys_idx) - (N_LINES // 2) * LINE_SPACING
+
+    def _y_of(self, qubit: int, sys_idx: int, offset: float = 0.0) -> float:
+        return self._mid_y(qubit, sys_idx) + offset * LINE_SPACING
+
+    def _global_staff_top(self, sys_idx: int) -> float:
+        return self._staff_top_y(0, sys_idx)
+
+    def _global_staff_bottom(self, sys_idx: int) -> float:
+        return self._staff_bottom_y(self.n_qubits - 1, sys_idx)
+
+    def _barrier_barline_xs(self, sys_idx: int):
         bl = []
-        for c in range(self.gates_per_measure, self.n_cols, self.gates_per_measure):
-            bl.append((self.xs[c - 1] + self.xs[c]) / 2.0)
+        sys_moments = self.systems[sys_idx]
+        xs = self.system_xs[sys_idx]
+        for i, moment in enumerate(sys_moments):
+            global_c = sys_idx * self.max_cols_per_system + i
+            if global_c in self._barrier_cols:
+                if i > 0:
+                    bl.append((xs[i - 1] + xs[i]) / 2.0)
+                else:
+                    bl.append(xs[i] - DX * 0.35)
         return bl
 
     # ---------- drawing primitives ----------
-    def _text(self, ax, x, y, s, size=10.5, weight="normal", style="normal",
-              color=None, ha="center", va="center", zorder=10):
-        ax.text(x, y, s, fontsize=size, fontweight=weight, fontstyle=style,
-                 color=color or self.style["ink"], ha=ha, va=va,
-                 family="DejaVu Serif", zorder=zorder)
+    def _text(self, ax, x, y, text, size=16, weight="normal", style="normal",
+              ha="center", va="center", color=None):
+        ax.text(x, y, text, fontsize=size, weight=weight, style=style,
+                ha=ha, va=va, color=color or self.style["ink"],
+                family="DejaVu Serif", zorder=4)
 
-    def _music_glyph(self, ax, x, y, key, size=34, color=None, va="center", zorder=8):
-        c = color or self.style["ink"]
-        if self.music_prop is not None:
-            ax.text(x, y, GLYPH[key], fontsize=size, fontproperties=self.music_prop,
-                     color=c, ha="center", va=va, zorder=zorder)
-        elif key == "gclef":
-            # Text fallback: draw a stylised "G" clef substitute
-            ax.text(x, y, "\U0001D11E", fontsize=size, color=c,
-                     ha="center", va=va, zorder=zorder,
-                     family="serif")
+    def _paste_image(self, ax, x, y, img, zoom, zorder=3):
+        imagebox = OffsetImage(img, zoom=zoom)
+        ab = AnnotationBbox(imagebox, (x, y), frameon=False, pad=0)
+        ab.set_zorder(zorder)
+        ax.add_artist(ab)
 
-    def _notehead(self, ax, x, y, filled=True, size=None, color=None, stem=True):
+    # ---------- note drawing ----------
+
+    def _notehead(self, ax, x, y, qubit, sys_idx, kind="black", stem=True, flag=False, gate_label=None):
         """
-        Draw a proper notehead with an optional stem, like a real quarter
-        note (filled) or half note (hollow).
+        Draw a notehead with an optional stem and gate label.
+        Gate labels are placed to the RIGHT of the notehead.
+        Ledger lines are drawn if the note falls outside the 5 staff lines.
         """
-        c = color or self.style["ink"]
-        # Notehead ellipse — tilted like a real music note
-        w = LINE_SPACING * 1.15
-        h = LINE_SPACING * 0.80
-        face = c if filled else "none"
-        lw_head = 1.8 if filled else 1.6
-        ax.add_patch(Ellipse((x, y), width=w, height=h, angle=-16,
-                               facecolor=face, edgecolor=c, lw=lw_head, zorder=9))
-        # Stem — straight vertical line going up from the right of the notehead
-        if stem:
-            stem_x = x + w * 0.42
-            stem_bottom = y
-            stem_top = y + STEM_LEN * LINE_SPACING
-            ax.plot([stem_x, stem_x], [stem_bottom, stem_top],
-                     color=c, lw=1.6, solid_capstyle="round", zorder=9)
+        ink = self.style["ink"]
 
-    def _x_notehead(self, ax, x, y, size=None, color=None, r=None, lw=2.0):
-        c = color or self.style["ink"]
-        if r is None:
-            r = 0.22 * LINE_SPACING * 2
-        ax.plot([x - r, x + r], [y - r, y + r], color=c, lw=lw, zorder=9)
-        ax.plot([x - r, x + r], [y + r, y - r], color=c, lw=lw, zorder=9)
+        # 1. Draw ledger lines if necessary
+        top_line = self._staff_top_y(qubit, sys_idx)
+        bot_line = self._staff_bottom_y(qubit, sys_idx)
+        
+        # A tiny bit of margin for floating point inaccuracies
+        eps = 1e-4
+        if y > top_line + eps:
+            # Note is above staff
+            cur_y = top_line + LINE_SPACING
+            while cur_y <= y + eps:
+                ax.plot([x - NOTE_W*0.7, x + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                cur_y += LINE_SPACING
+        elif y < bot_line - eps:
+            cur_y = bot_line - LINE_SPACING
+            while cur_y >= y - eps:
+                ax.plot([x - NOTE_W*0.7, x + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                cur_y -= LINE_SPACING
 
-    def _target_symbol(self, ax, x, y, r=None, color=None, lw=2.0):
-        c = color or self.style["ink"]
-        if r is None:
-            r = 0.28 * LINE_SPACING * 2
-        ax.add_patch(Circle((x, y), r, fill=False, edgecolor=c, lw=lw, zorder=9))
-        ax.plot([x - r, x + r], [y, y], color=c, lw=lw, zorder=9)
-        ax.plot([x, x], [y - r, y + r], color=c, lw=lw, zorder=9)
+        # 2. Draw actual notehead
+        if kind == "measure":
+            hx = 0.24
+            hy = 0.24
+            ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=2.8, zorder=8)
+            ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=2.8, zorder=8)
+        else:
+            _draw_notehead(ax, x, y, kind=kind, ink=ink, bg=self.style["bg"])
 
-    def _control_dot(self, ax, x, y, color=None, r=None):
-        c = color or self.style["ink"]
-        if r is None:
-            r = 0.13 * LINE_SPACING * 2
-        ax.add_patch(Circle((x, y), r, fill=True, facecolor=c, edgecolor=c, zorder=9))
+        if stem and kind not in ("whole",):
+            stem_top = y + STEM_LEN
+            _draw_stem(ax, x, y, stem_top, ink=ink)
+            if flag:
+                _draw_flag(ax, x + STEM_X_OFFSET, stem_top, ink=ink)
+
+        if gate_label:
+            # Place label to the right of the note, slightly closer
+            label_x = x + NOTE_W * 0.65
+            
+            # If the label has parameters (parentheses) and is long, put params underneath
+            if "(" in gate_label and len(gate_label) > 4:
+                base, params = gate_label.split("(", 1)
+                params = "(" + params
+                
+                # Base name next to note
+                self._text(ax, label_x, y, base,
+                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                           ha="left", va="center")
+                # Params underneath the base name, smaller and normal weight
+                self._text(ax, label_x, y - LINE_SPACING * 0.85, params,
+                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
+                           ha="left", va="center")
+            else:
+                self._text(ax, label_x, y, gate_label,
+                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                           ha="left", va="center")
+
+    def _chord(self, ax, x, qubits, sys_idx, kinds=None, offsets=None, label=None):
+        """
+        Draw a multi-qubit gate as a musical chord.
+        Notes on different staves are connected by a single long stem.
+        The gate label sits precisely ON TOP of the stem.
+        """
+        ink = self.style["ink"]
+        if offsets is None:
+            offsets = [0.0] * len(qubits)
+            
+        ys = [self._y_of(q, sys_idx, off) for q, off in zip(qubits, offsets)]
+        y_min, y_max = min(ys), max(ys)
+
+        if kinds is None:
+            kinds = ["black"] * len(qubits)
+
+        notes = sorted(zip(qubits, ys, kinds), key=lambda item: item[1], reverse=True)
+        stem_top = y_max + STEM_LEN
+        stem_xs = []
+
+        # Draw all noteheads, their ledger lines, and individual stems
+        for i, (q, y_note, kind) in enumerate(notes):
+            x_note = x + i * NOTE_W * 1.5
+            stem_xs.append(x_note + STEM_X_OFFSET)
+
+            top_line = self._staff_top_y(q, sys_idx)
+            bot_line = self._staff_bottom_y(q, sys_idx)
+            eps = 1e-4
+            if y_note > top_line + eps:
+                cur_y = top_line + LINE_SPACING
+                while cur_y <= y_note + eps:
+                    ax.plot([x_note - NOTE_W*0.7, x_note + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                    cur_y += LINE_SPACING
+            elif y_note < bot_line - eps:
+                cur_y = bot_line - LINE_SPACING
+                while cur_y >= y_note - eps:
+                    ax.plot([x_note - NOTE_W*0.7, x_note + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                    cur_y -= LINE_SPACING
+
+            _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"])
+            _draw_stem(ax, x_note, y_note, stem_top, ink=ink)
+
+        # Draw horizontal beam connecting all stems at the top
+        if len(stem_xs) > 1:
+            import matplotlib.patches as patches
+            stem_w = 0.04
+            beam_h = 0.15
+            rect = patches.Rectangle((min(stem_xs) - stem_w/2, stem_top - beam_h), 
+                                     max(stem_xs) - min(stem_xs) + stem_w, beam_h,
+                                     facecolor=ink, edgecolor='none', zorder=7)
+            ax.add_patch(rect)
+
+        # Gate label exactly on top of the center of the beam
+        if label:
+            cx = (min(stem_xs) + max(stem_xs)) / 2.0
+            
+            if "(" in label:
+                base, params = label.split("(", 1)
+                params = "(" + params
+                
+                # Base on the left, closer to beam
+                self._text(ax, cx - 0.1, stem_top + LINE_SPACING * 0.4, base,
+                           size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
+                           ha="right", va="bottom")
+                # Params on the right, same height
+                self._text(ax, cx + 0.1, stem_top + LINE_SPACING * 0.4, params,
+                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
+                           ha="left", va="bottom")
+            else:
+                self._text(ax, cx, stem_top + LINE_SPACING * 0.4, label,
+                           size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
+                           ha="center", va="bottom")
 
     # ---------- staves ----------
-    def _draw_staff_lines(self, ax, qubit):
-        top = self._staff_top_y(qubit)
+    def _draw_staff_lines(self, ax, qubit, sys_idx):
+        top = self._staff_top_y(qubit, sys_idx)
+        # Final barline exact position is system_end_x
+        fx = self.system_end_x[sys_idx]
         for j in range(N_LINES):
             y = top - j * LINE_SPACING
-            ax.plot([BRACE_X, self.end_x], [y, y], color=self.style["ink"],
-                     lw=0.8, alpha=0.9, zorder=1)
+            # Exact boundary: LEFT_BAR_X to fx (no overshoot)
+            ax.plot([LEFT_BAR_X, fx], [y, y], color=self.style["ink"],
+                    lw=0.8, alpha=0.9, zorder=1)
 
-    def _draw_clef_and_label(self, ax, qubit):
-        mid = self._mid_y(qubit)
-        # Larger treble clef — should visually fill the staff
-        clef_size = max(44, int(80 * LINE_SPACING))
-        self._music_glyph(ax, CLEF_X, mid + 0.10 * LINE_SPACING, "gclef",
-                           size=clef_size, va="center")
-        # Large qubit label styled like a time signature (e.g. "q" over "0")
-        self._text(ax, LEFT_LABEL_X, mid + 0.6 * LINE_SPACING,
-                    "q", size=20, weight="bold", ha="right", va="center")
-        self._text(ax, LEFT_LABEL_X, mid - 0.6 * LINE_SPACING,
-                    f"{qubit}", size=20, weight="bold", ha="right", va="center")
+    def _draw_clef_and_label(self, ax, qubit, sys_idx):
+        ink = self.style["ink"]
+        mid = self._mid_y(qubit, sys_idx)
 
-    def _draw_initial_state(self, ax, qubit):
-        x = X_START - 1.05
-        y = self._mid_y(qubit)
-        self._notehead(ax, x, y, filled=False, color=self.style["accent"], stem=False)
-        self._text(ax, x, y - 1.1 * LINE_SPACING, "|0\u27e9", size=8,
-                    style="italic", color=self.style["accent"])
+        # Treble clef – close to the left vertical bar
+        clef_y = mid + LINE_SPACING * 0.5
+        self._paste_image(ax, CLEF_X, clef_y, self.clef_img, zoom=0.09)
 
-    def _draw_barlines(self, ax, y_top, y_bottom):
-        for bx in self._measure_barline_xs():
-            ax.plot([bx, bx], [y_top, y_bottom], color=self.style["ink"], lw=1.2, zorder=2)
-        # Initial barline after clef/init area
-        init_bar_x = (X_START - 1.05 + self.xs[0]) / 2.0 - 0.10 if self.xs else X_START
-        ax.plot([init_bar_x, init_bar_x], [y_top, y_bottom],
-                 color=self.style["ink"], lw=1.0, zorder=2)
-        # Final double/thick barline
-        fx = self.end_x - 0.30
-        ax.plot([fx - 0.12, fx - 0.12], [y_top, y_bottom],
-                 color=self.style["ink"], lw=1.0, zorder=2)
-        ax.plot([fx, fx], [y_top, y_bottom],
-                 color=self.style["ink"], lw=2.8, zorder=2)
+        # Qubit label – fills the WHOLE staff top to bottom like 4/4
+        top = self._staff_top_y(qubit, sys_idx)
+        bot = self._staff_bottom_y(qubit, sys_idx)
+        mid = self._mid_y(qubit, sys_idx)
+        
+        # 'q' exactly between the top line and middle line
+        self._text(ax, QLABEL_X, (top + mid) / 2.0,
+                   "q", size=44, weight="bold", ha="center", va="center")
+        # the number exactly between the middle line and bottom line
+        self._text(ax, QLABEL_X, (bot + mid) / 2.0,
+                   f"{qubit}", size=44, weight="bold", ha="center", va="center")
+
+    def _draw_barlines(self, ax, sys_idx):
+        """Draw all vertical barlines spanning exactly from the top staff line
+        to the bottom staff line — no overshoot."""
+        ink = self.style["ink"]
+        y_top = self._global_staff_top(sys_idx)
+        y_bot = self._global_staff_bottom(sys_idx)
+
+        # Left vertical closing bar
+        ax.plot([LEFT_BAR_X, LEFT_BAR_X], [y_top, y_bot],
+                color=ink, lw=1.8, zorder=2)
+
+        # Barrier barlines
+        for bx in self._barrier_barline_xs(sys_idx):
+            ax.plot([bx, bx], [y_top, y_bot], color=ink, lw=1.4, zorder=2)
+
+        # Closing barline at right end
+        fx = self.system_end_x[sys_idx]
+        is_final_system = (sys_idx == len(self.systems) - 1)
+        
+        if is_final_system:
+            # Thick double barline only at the very end of the circuit
+            ax.plot([fx - 0.25, fx - 0.25], [y_top, y_bot], color=ink, lw=1.0, zorder=2)
+            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=4.0, zorder=2)
+        else:
+            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=1.0, zorder=2)
 
     # ---------- gate rendering ----------
-    def _draw_event(self, ax, ev: GateEvent):
-        x = self.xs[ev.column]
+    def _draw_event(self, ax, ev: GateEvent, sys_idx: int, local_i: int):
+        x = self.system_xs[sys_idx][local_i]
         ink = self.style["ink"]
 
         if ev.kind == "barrier":
-            y0 = self._y_of(min(ev.qubits), -2.2)
-            y1 = self._y_of(max(ev.qubits), 2.2)
-            ax.plot([x, x], [y1, y0], color=ink, lw=1.2,
-                     ls=(0, (4, 3)), alpha=0.55, zorder=6)
-            self._text(ax, x, y1 + 0.6 * LINE_SPACING, "barrier",
-                        size=7, style="italic", color=ink)
             return
 
         if ev.kind == "measure":
             q = ev.targets[0]
-            y = self._y_of(q, 0.0)
-            self._x_notehead(ax, x, y)
-            self._text(ax, x, y - 1.2 * LINE_SPACING, "M",
-                        size=9, weight="bold", style="italic")
+            y = self._y_of(q, sys_idx, 0.0)
+            _draw_measure_symbol(ax, x, y, ink=ink)
             return
 
         if ev.kind == "single":
             q = ev.targets[0]
-            off = _pitch_offset(ev)
-            y = self._y_of(q, off)
-            filled = ev.name != "h"
-            self._notehead(ax, x, y, filled=filled, stem=True)
-            label_y = y - 1.1 * LINE_SPACING if off >= 0 else y + 1.4 * LINE_SPACING
-            self._text(ax, x, label_y, ev.label,
-                        size=8, weight="bold", style="italic")
+            off = _solfege_offset(ev)
+            y = self._y_of(q, sys_idx, off)
+            kind = "black"
+            flag = True if ev.name == "h" else False
+            self._notehead(ax, x, y, q, sys_idx, kind=kind, stem=True, flag=flag, gate_label=ev.label)
             return
 
         if ev.kind == "swap":
-            q0, q1 = ev.targets[0], ev.targets[1]
-            y0, y1 = self._y_of(q0, 0.0), self._y_of(q1, 0.0)
-            ax.plot([x, x], [y0, y1], color=ink, lw=1.5, zorder=6)
-            r_swap = 0.25 * LINE_SPACING * 2
-            self._x_notehead(ax, x, y0, r=r_swap, lw=2.0)
-            self._x_notehead(ax, x, y1, r=r_swap, lw=2.0)
-            mid_y = (y0 + y1) / 2.0
-            self._text(ax, x + 0.6, mid_y, "SWAP",
-                        size=8.5, weight="bold", style="italic", ha="left")
+            qubits = sorted([ev.targets[0], ev.targets[1]])
+            self._chord(ax, x, qubits, sys_idx, kinds=["whole", "whole"], label="SWAP")
             return
 
         if ev.kind == "control":
+            # Extract base name to find the target's pitch offset
+            base_name = ev.name.lstrip('c')
+            if not base_name and 'cx' in ev.name:
+                base_name = 'x'
+            if not base_name:
+                base_name = ev.name
+            target_off = _get_offset_for_name(base_name)
+
             all_q = sorted(ev.qubits)
-            y_top = self._y_of(all_q[0], 0.0)
-            y_bot = self._y_of(all_q[-1], 0.0)
-            ax.plot([x, x], [y_top, y_bot], color=ink, lw=1.5, zorder=6)
-
-            for q in ev.controls:
-                self._control_dot(ax, x, self._y_of(q, 0.0))
-
-            for q in ev.targets:
-                yt = self._y_of(q, 0.0)
-                if ev.name == "cx":
-                    self._target_symbol(ax, x, yt)
-                elif ev.name == "cz":
-                    self._control_dot(ax, x, yt)
+            ctrl_set = set(ev.controls)
+            kinds = []
+            offsets = []
+            for q in all_q:
+                if q in ctrl_set:
+                    kinds.append("whole")
+                    offsets.append(0.0) # control note is usually at 0.0 offset (mid line)
                 else:
-                    self._notehead(ax, x, yt, filled=True, stem=False)
-
-            label_y = (y_top + y_bot) / 2.0
-            self._text(ax, x + 0.6, label_y, ev.label,
-                        size=8.5, weight="bold", style="italic", ha="left")
+                    kinds.append("black")
+                    offsets.append(target_off)
+            self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, label=ev.label)
             return
 
-        # generic fallback: treat like a "control" block with plain noteheads
+        # Generic multi-qubit fallback (e.g. rzz, rxx, swap)
+        base_name = ev.name
+        if ev.name in ("rzz", "rxx", "ryy"):
+            base_name = ev.name[-1] # "z", "x", "y"
+        target_off = _get_offset_for_name(base_name)
+        
         all_q = sorted(ev.qubits)
-        y_top = self._y_of(all_q[0], 0.0)
-        y_bot = self._y_of(all_q[-1], 0.0)
-        if len(all_q) > 1:
-            ax.plot([x, x], [y_top, y_bot], color=ink, lw=1.5, zorder=6)
-        for q in all_q:
-            self._notehead(ax, x, self._y_of(q, 0.0), filled=True, stem=False)
-        self._text(ax, x + 0.6, (y_top + y_bot) / 2.0, ev.label,
-                    size=8.5, weight="bold", style="italic", ha="left")
+        offsets = [target_off] * len(all_q)
+        self._chord(ax, x, all_q, sys_idx, kinds=["black"] * len(all_q), offsets=offsets, label=ev.label)
 
     # ---------- public entry point ----------
     def draw(self, figsize=None, dpi=170):
         n = self.n_qubits
-        top_y = self._staff_top_y(0) + 1.6
-        bottom_y = self._staff_top_y(n - 1) - STAFF_HEIGHT - 1.0
-        width = self.end_x + 1.0
-        height = top_y - bottom_y
+        
+        # Calculate full width/height based on systems
+        max_width = max(self.system_end_x) + 1.0 if self.system_end_x else 10.0
+        y_top_global = self._global_staff_top(0)
+        y_bot_global = self._global_staff_bottom(len(self.systems) - 1)
+        
+        pad_top = 4.5
+        pad_bot = 1.5
+        height = (y_top_global + pad_top) - (y_bot_global - pad_bot)
 
         if figsize is None:
-            figsize = (max(10.0, width * 0.72), max(3.0, height * 0.72))
+            figsize = (max(10.0, max_width * 0.72), max(3.0, height * 0.72))
 
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         fig.patch.set_facecolor(self.style["bg"])
         ax.set_facecolor(self.style["bg"])
 
-        for q in range(n):
-            self._draw_staff_lines(ax, q)
-            self._draw_clef_and_label(ax, q)
-            self._draw_initial_state(ax, q)
+        # Draw each system
+        for sys_idx, sys_moments in enumerate(self.systems):
+            y_top = self._global_staff_top(sys_idx)
+            y_bot = self._global_staff_bottom(sys_idx)
 
-        draw_vertical_brace(ax, BRACE_X, top_y - 0.9, bottom_y + 0.9,
-                              color=self.style["ink"], lw=2.0)
+            for q in range(n):
+                self._draw_staff_lines(ax, q, sys_idx)
+                self._draw_clef_and_label(ax, q, sys_idx)
 
-        self._draw_barlines(ax, top_y - 0.9, bottom_y + 0.9)
+            draw_vertical_brace(ax, BRACE_X, y_top, y_bot,
+                                color=self.style["ink"], lw=1.8)
 
-        for moment in self.moments:
-            for ev in moment:
-                self._draw_event(ax, ev)
+            self._draw_barlines(ax, sys_idx)
+
+            for i, moment in enumerate(sys_moments):
+                for ev in moment:
+                    self._draw_event(ax, ev, sys_idx, i)
 
         if self.title:
-            self._text(ax, width / 2.0, top_y + 0.6, self.title, size=15,
-                        weight="bold", ha="center", va="bottom")
+            self._text(ax, max_width / 2.0, y_top_global + pad_top - 0.3, self.title, size=15,
+                       weight="bold", ha="center", va="bottom")
 
-        ax.set_xlim(-0.3, width)
-        ax.set_ylim(bottom_y, top_y + (1.2 if self.title else 0.3))
+        ax.set_xlim(-0.3, max_width)
+        ax.set_ylim(y_bot_global - pad_bot, y_top_global + pad_top)
         ax.set_aspect("equal")
         ax.axis("off")
         fig.tight_layout(pad=0.5)
         return fig
 
 
-def draw_circuit(qc, filename=None, style="clean", gates_per_measure=3,
-                  title=None, dpi=200):
-    """
-    Renders a qiskit QuantumCircuit as a musical-staff circuit diagram.
-
-    Parameters
-    ----------
-    qc : qiskit.QuantumCircuit
-    filename : str, optional -- if given, saves the figure (png/svg/pdf by extension)
-    style : "ink" (aged paper + green ink) or
-            "clean" (white background, black ink, good for printing)  ← default
-    gates_per_measure : how many circuit "moments" to group between barlines
-    title : optional title text drawn above the score
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    """
-    drawer = StaffCircuitDrawer(qc, style=style, gates_per_measure=gates_per_measure, title=title)
+def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=12,
+                 title=None, dpi=200):
+    drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title)
     fig = drawer.draw(dpi=dpi)
     if filename:
         fig.savefig(filename, facecolor=fig.get_facecolor(), bbox_inches="tight")
