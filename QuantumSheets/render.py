@@ -206,14 +206,14 @@ def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
 
 
 class StaffCircuitDrawer:
-    def __init__(self, qc, style="clean", max_cols_per_system=12, title=None):
+    def __init__(self, qc, style="clean", max_cols_per_system=12, title=None, strip=False):
         self.qc = qc
         self.n_qubits = qc.num_qubits
         self.style = STYLES[style]
-        self.max_cols_per_system = max(1, max_cols_per_system)
         self.title = title
         self.moments = circuit_to_moments(qc)
         self.n_cols = len(self.moments)
+        self.max_cols_per_system = max(1, self.n_cols) if strip else max(1, max_cols_per_system)
         
         # Split moments into multi-system lines
         self.systems = []
@@ -655,8 +655,8 @@ class StaffCircuitDrawer:
 
 
 def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=12,
-                 title=None, dpi=200):
-    drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title)
+                 title=None, dpi=200, strip=False):
+    drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title, strip=strip)
     fig = drawer.draw(dpi=dpi)
     if filename:
         fig.savefig(filename, facecolor=fig.get_facecolor(), bbox_inches="tight")

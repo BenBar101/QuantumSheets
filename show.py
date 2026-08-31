@@ -38,7 +38,7 @@ def main():
     # 2. Render the circuit as a musical score
     output_filename = "my_circuit_score.png"
     print(f"🎨 Rendering the quantum circuit using QuantumSheets...")
-    draw_circuit(qc, filename=output_filename)
+    draw_circuit(qc, filename=output_filename, strip=True)
     
     print(f"✨ Done! Your quantum sheet music has been saved to: {os.path.abspath(output_filename)}")
 
