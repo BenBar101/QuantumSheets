@@ -111,7 +111,8 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         col = max(next_free_col[q] for q in q_idx)
 
         if name == "barrier":
-            continue
+            kind = "barrier"
+            controls, targets = [], q_idx
 
         elif name == "measure":
             kind = "measure"

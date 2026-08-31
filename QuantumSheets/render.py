@@ -475,15 +475,14 @@ class StaffCircuitDrawer:
         import matplotlib.patches as patches
 
         # 'q' in the top two spaces (between top line and middle line)
-        # Using serif font to look like time signature
-        path_q = TextPath((0, 0), "q", size=1, prop={'family': 'serif', 'weight': 'bold', 'style': 'italic'})
+        # Using default bold sans-serif font like normal text
+        path_q = TextPath((0, 0), "q", size=1, prop={'weight': 'bold'})
         bbox_q = path_q.get_extents()
         
         # Scale height exactly to 2 * LINE_SPACING (the top two spaces)
         scale_q = (2.0 * LINE_SPACING) / bbox_q.height
         # Shift down from top line
-        offset_y_q = (top - 2.0 * LINE_SPACING) - (bbox_q.y0 * scale_q)
-        # Center horizontally at QLABEL_X
+        offset_y_q = mid - (bbox_q.y0 * scale_q)
         offset_x_q = QLABEL_X - (bbox_q.x0 + bbox_q.width / 2.0) * scale_q
         
         transform_q = Affine2D().scale(scale_q).translate(offset_x_q, offset_y_q)
@@ -491,7 +490,7 @@ class StaffCircuitDrawer:
         ax.add_patch(patch_q)
 
         # Qubit number in the bottom two spaces
-        path_n = TextPath((0, 0), str(qubit), size=1, prop={'family': 'serif', 'weight': 'bold'})
+        path_n = TextPath((0, 0), str(qubit), size=1, prop={'weight': 'bold'})
         bbox_n = path_n.get_extents()
         
         scale_n = (2.0 * LINE_SPACING) / bbox_n.height
@@ -552,7 +551,7 @@ class StaffCircuitDrawer:
             off = _solfege_offset(ev)
             y = self._y_of(q, sys_idx, off)
             kind = "black"
-            flag = True if ev.name == "h" else False
+            flag = False
             self._notehead(ax, x, y, q, sys_idx, kind=kind, stem=True, flag=flag, gate_label=ev.label)
             return
 
