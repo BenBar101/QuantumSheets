@@ -59,7 +59,7 @@ STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
 
 GATE_LABEL_SIZE = 28            # font size for gate labels (bigger)
-QLABEL_SIZE     = 92            # qubit label size – fills the staff top to bottom
+QLABEL_SIZE     = 90            # qubit label size – fills the staff top to bottom
 
 # ── Solfège pitch mapping ─────────────────────────────────────────────
 _SOLFEGE = {
@@ -155,18 +155,18 @@ def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
     """Draw a classical eighth-note flag curving down from the top of the stem."""
     from matplotlib.path import Path
     import matplotlib.patches as patches
-    w = NOTE_W * 1.0
-    h = LINE_SPACING * 2.8
+    w = NOTE_W * 1.5
+    h = LINE_SPACING * 3.0
     
     verts = [
-        (stem_x, stem_top),                             # Start
-        (stem_x + w * 1.0, stem_top - h * 0.1),         # CP 1
-        (stem_x + w * 1.1, stem_top - h * 0.6),         # CP 2
-        (stem_x + w * 0.5, stem_top - h * 0.95),        # End 1 (tip)
+        (stem_x, stem_top),                             # Start at top of stem
+        (stem_x + w * 0.5, stem_top - h * 0.1),         # CP1: go right and slightly down
+        (stem_x + w * 1.0, stem_top - h * 0.5),         # CP2: down further right
+        (stem_x + w * 0.2, stem_top - h * 0.95),        # End1: tip curves back towards the stem, but doesn't touch it!
         
-        (stem_x + w * 0.6, stem_top - h * 0.6),         # CP 3
-        (stem_x + w * 0.4, stem_top - h * 0.3),         # CP 4
-        (stem_x, stem_top - h * 0.35),                  # End 2 (on stem)
+        (stem_x + w * 0.6, stem_top - h * 0.5),         # CP3: outer edge bottom
+        (stem_x + w * 0.2, stem_top - h * 0.2),         # CP4: outer edge top
+        (stem_x, stem_top - h * 0.35),                  # End2: hit stem lower down
     ]
     codes = [
         Path.MOVETO,
@@ -422,15 +422,15 @@ class StaffCircuitDrawer:
                 params = "(" + params
                 
                 # Base on the left, closer to beam
-                self._text(ax, cx - 0.1, stem_top + LINE_SPACING * 0.4, base,
+                self._text(ax, cx - 0.01, stem_top + LINE_SPACING * 0.1, base,
                            size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
                            ha="right", va="bottom")
                 # Params on the right, same height
-                self._text(ax, cx + 0.1, stem_top + LINE_SPACING * 0.4, params,
+                self._text(ax, cx + 0.01, stem_top + LINE_SPACING * 0.1, params,
                            size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
                            ha="left", va="bottom")
             else:
-                self._text(ax, cx, stem_top + LINE_SPACING * 0.4, label,
+                self._text(ax, cx, stem_top + LINE_SPACING * 0.1, label,
                            size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
                            ha="center", va="bottom")
 
@@ -459,11 +459,12 @@ class StaffCircuitDrawer:
         mid = self._mid_y(qubit, sys_idx)
         
         # 'q' exactly between the top line and middle line
-        self._text(ax, QLABEL_X, (top + mid) / 2.0,
-                   "q", size=44, weight="bold", ha="center", va="center")
-        # the number exactly between the middle line and bottom line
-        self._text(ax, QLABEL_X, (bot + mid) / 2.0,
-                   f"{qubit}", size=44, weight="bold", ha="center", va="center")
+        # q higher, spanning past the top line
+        self._text(ax, QLABEL_X, top - LINE_SPACING * 0.1,
+                   "q", size=QLABEL_SIZE, weight="bold", ha="center", va="top")
+        # the number lower, spanning past the bottom line
+        self._text(ax, QLABEL_X, bot + LINE_SPACING * 0.1,
+                   f"{qubit}", size=QLABEL_SIZE, weight="bold", ha="center", va="bottom")
 
     def _draw_barlines(self, ax, sys_idx):
         """Draw all vertical barlines spanning exactly from the top staff line
@@ -476,9 +477,9 @@ class StaffCircuitDrawer:
         ax.plot([LEFT_BAR_X, LEFT_BAR_X], [y_top, y_bot],
                 color=ink, lw=1.8, zorder=2)
 
-        # Barrier barlines
+        # Barrier barlines (drawn as dashed lines so they are clearly barriers, not standard barlines)
         for bx in self._barrier_barline_xs(sys_idx):
-            ax.plot([bx, bx], [y_top, y_bot], color=ink, lw=1.4, zorder=2)
+            ax.plot([bx, bx], [y_top, y_bot], color=ink, lw=1.4, linestyle="--", zorder=2)
 
         # Closing barline at right end
         fx = self.system_end_x[sys_idx]
@@ -486,8 +487,8 @@ class StaffCircuitDrawer:
         
         if is_final_system:
             # Thick double barline only at the very end of the circuit
-            ax.plot([fx - 0.25, fx - 0.25], [y_top, y_bot], color=ink, lw=1.0, zorder=2)
-            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=4.0, zorder=2)
+            ax.plot([fx - 0.3, fx - 0.3], [y_top, y_bot], color=ink, lw=1.2, zorder=2)
+            ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=5.0, zorder=2)
         else:
             ax.plot([fx, fx], [y_top, y_bot], color=ink, lw=1.0, zorder=2)
 
