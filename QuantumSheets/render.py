@@ -46,7 +46,7 @@ LEFT_BAR_X      = 1.4           # vertical closing line at far left
 # Note geometry – properly proportioned, tilted noteheads
 NOTE_W          = 0.55          # width of notehead ellipse (data units)
 NOTE_H          = 0.40          # height of notehead ellipse
-NOTE_TILT       = -18           # degrees – real noteheads tilt slightly
+NOTE_TILT       = 25           # degrees – real noteheads tilt slightly
 HALF_LW         = 2.2           # stroke width for half-note ring
 WHOLE_W         = 0.56          # whole note width
 WHOLE_H         = 0.40
@@ -54,7 +54,7 @@ WHOLE_LW        = 2.8           # thicker stroke so whole notes look full
 WHOLE_INNER_W   = 0.26          # inner ellipse to create the classic "double-ring" whole note look
 WHOLE_INNER_H   = 0.30
 
-STEM_X_OFFSET   = NOTE_W * 0.50  # right edge of notehead
+STEM_X_OFFSET   = NOTE_W * 0.44  # right edge of notehead
 STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
 
@@ -147,7 +147,7 @@ def _draw_stem(ax, x, y_bottom, y_top, ink="#1a1a1a"):
     import matplotlib.patches as patches
     stem_w = 0.04  # exact data width for perfect alignment
     stem_x = x + STEM_X_OFFSET
-    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom), stem_w, y_top - y_bottom,
+    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom - 0.05), stem_w, y_top - y_bottom + 0.05,
                              facecolor=ink, edgecolor='none', zorder=7)
     ax.add_patch(rect)
 
