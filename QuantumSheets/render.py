@@ -59,7 +59,7 @@ STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
 
 GATE_LABEL_SIZE = 28            # font size for gate labels (bigger)
-QLABEL_SIZE     = 90            # qubit label size – fills the staff top to bottom
+QLABEL_SIZE     = 50            # qubit label size – fills the staff top to bottom
 
 # ── Solfège pitch mapping ─────────────────────────────────────────────
 _SOLFEGE = {
@@ -459,12 +459,12 @@ class StaffCircuitDrawer:
         mid = self._mid_y(qubit, sys_idx)
         
         # 'q' exactly between the top line and middle line
-        # q higher, spanning past the top line
-        self._text(ax, QLABEL_X, top - LINE_SPACING * 0.1,
-                   "q", size=QLABEL_SIZE, weight="bold", ha="center", va="top")
-        # the number lower, spanning past the bottom line
-        self._text(ax, QLABEL_X, bot + LINE_SPACING * 0.1,
-                   f"{qubit}", size=QLABEL_SIZE, weight="bold", ha="center", va="bottom")
+        # Place 'q' such that its descender sits just above the middle line
+        self._text(ax, QLABEL_X, top + LINE_SPACING * 0.4,
+                   "q", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
+        # Place the number such that it sits between the bottom two lines
+        self._text(ax, QLABEL_X, bot - LINE_SPACING * 0.4,
+                   f"{qubit}", size=QLABEL_SIZE, weight="bold", ha="center", va="center")
 
     def _draw_barlines(self, ax, sys_idx):
         """Draw all vertical barlines spanning exactly from the top staff line
