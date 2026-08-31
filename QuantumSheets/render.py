@@ -564,7 +564,6 @@ class StaffCircuitDrawer:
             return
 
         if ev.kind == "control":
-            # Extract base name to find the target's pitch offset
             base_name = ev.name.lstrip('c')
             if not base_name and 'cx' in ev.name:
                 base_name = 'x'
@@ -578,10 +577,12 @@ class StaffCircuitDrawer:
             offsets = []
             for q in all_q:
                 if q in ctrl_set:
-                    kinds.append("whole")
-                    offsets.append(0.0) # control note is usually at 0.0 offset (mid line)
+                    # Controls are regular (black) notes
+                    kinds.append("black")
+                    offsets.append(0.0) 
                 else:
-                    kinds.append("x_note" if "swap" in ev.name else "black")
+                    # Targets are full (whole) notes
+                    kinds.append("x_note" if "swap" in ev.name else "whole")
                     offsets.append(target_off)
             self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, label=ev.label)
             return
