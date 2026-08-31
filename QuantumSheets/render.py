@@ -226,11 +226,17 @@ class StaffCircuitDrawer:
         # Identify barrier columns globally
         self._barrier_cols = set()
         self._empty_barrier_cols = set()
+        self._invisible_barrier_cols = set()
         for col_idx, moment in enumerate(self.moments):
             if any(ev.kind == "barrier" for ev in moment):
                 self._barrier_cols.add(col_idx)
                 if all(ev.kind == "barrier" for ev in moment):
                     self._empty_barrier_cols.add(col_idx)
+                    # Make barrier invisible if immediately followed by only measurements
+                    if col_idx + 1 < len(self.moments):
+                        next_m = self.moments[col_idx + 1]
+                        if next_m and all(ev.kind == "measure" for ev in next_m):
+                            self._invisible_barrier_cols.add(col_idx)
 
         self._compute_system_xs()
         self.clef_img = mpimg.imread(_CLEF_PATH)
@@ -288,7 +294,7 @@ class StaffCircuitDrawer:
         xs = self.system_xs[sys_idx]
         for i, moment in enumerate(sys_moments):
             global_c = sys_idx * self.max_cols_per_system + i
-            if global_c in self._barrier_cols:
+            if global_c in self._barrier_cols and global_c not in getattr(self, '_invisible_barrier_cols', set()):
                 if i > 0:
                     bl.append((xs[i - 1] + xs[i]) / 2.0)
                 else:

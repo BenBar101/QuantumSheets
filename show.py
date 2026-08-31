@@ -32,8 +32,8 @@ def main():
     qc.x(2)
     qc.cx(2, 0)
     qc.x(2)
-    # Finally, measure all qubits (using measure instead of measure_all to avoid the implicit barrier)
-    qc.measure([0, 1, 2], [0, 1, 2])
+    # Finally, measure all qubits
+    qc.measure_all()
 
     # 2. Render the circuit as a musical score
     output_filename = "my_circuit_score.png"
