@@ -252,7 +252,7 @@ class StaffCircuitDrawer:
                     x += DX
             
             # The final barline is drawn further to the right to clear any beamed chords
-            end_x = (xs[-1] if xs else X_START) + DX * 1.3
+            end_x = (xs[-1] if xs else X_START) + DX * 0.6
             self.system_xs.append(xs)
             self.system_end_x.append(end_x)
 
