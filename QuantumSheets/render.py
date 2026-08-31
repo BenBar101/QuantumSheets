@@ -225,9 +225,12 @@ class StaffCircuitDrawer:
 
         # Identify barrier columns globally
         self._barrier_cols = set()
+        self._empty_barrier_cols = set()
         for col_idx, moment in enumerate(self.moments):
             if any(ev.kind == "barrier" for ev in moment):
                 self._barrier_cols.add(col_idx)
+                if all(ev.kind == "barrier" for ev in moment):
+                    self._empty_barrier_cols.add(col_idx)
 
         self._compute_system_xs()
         self.clef_img = mpimg.imread(_CLEF_PATH)
@@ -245,7 +248,8 @@ class StaffCircuitDrawer:
                 if i > 0 and global_c in self._barrier_cols:
                     x += BARRIER_GAP
                 xs.append(x)
-                x += DX
+                if global_c not in self._empty_barrier_cols:
+                    x += DX
             
             # The final barline is drawn further to the right to clear any beamed chords
             end_x = (xs[-1] if xs else X_START) + DX * 1.3
