@@ -258,8 +258,8 @@ class StaffCircuitDrawer:
 
     def _sys_offset_y(self, sys_idx: int) -> float:
         # Each system takes up space for all qubits plus top/bottom padding
-        pad_top = 2.7
-        pad_bot = 1.8
+        pad_top = 2.4
+        pad_bot = 1.6
         height_per_qubit = (STAFF_HEIGHT + STAFF_GAP)
         sys_height = self.n_qubits * height_per_qubit + pad_top + pad_bot
         return -sys_idx * sys_height
