@@ -155,25 +155,31 @@ def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
     """Draw a classical eighth-note flag curving down from the top of the stem."""
     from matplotlib.path import Path
     import matplotlib.patches as patches
-    w = NOTE_W * 1.5
-    h = LINE_SPACING * 3.0
     
     verts = [
-        (stem_x, stem_top),                             # Start at top of stem
-        (stem_x + w * 0.5, stem_top - h * 0.1),         # CP1: go right and slightly down
-        (stem_x + w * 1.0, stem_top - h * 0.5),         # CP2: down further right
-        (stem_x + w * 0.2, stem_top - h * 0.95),        # End1: tip curves back towards the stem, but doesn't touch it!
-        
-        (stem_x + w * 0.6, stem_top - h * 0.5),         # CP3: outer edge bottom
-        (stem_x + w * 0.2, stem_top - h * 0.2),         # CP4: outer edge top
-        (stem_x, stem_top - h * 0.35),                  # End2: hit stem lower down
+        (0.02, 0.0),       # 1. Start at top right of stem
+        (0.8, 0.5),        # 2. Control point outer curve top (sloping down and out)
+        (1.1, 1.8),        # 3. Control point outer curve bottom
+        (0.15, 3.2),       # 4. Tip of the flag curling down/in (very sharp point)
+        (0.8, 2.0),        # 5. Control point inner curve bottom
+        (0.15, 1.0),       # 6. Control point inner curve top
+        (0.02, 0.8),       # 7. End attached to stem lower down
+        (0.02, 0.0),       # Close poly
     ]
+    
     codes = [
         Path.MOVETO,
         Path.CURVE4, Path.CURVE4, Path.CURVE4,
         Path.CURVE4, Path.CURVE4, Path.CURVE4,
+        Path.CLOSEPOLY
     ]
-    path = Path(verts, codes)
+    
+    # Scale and translate
+    # The stem goes UP, meaning stem_top is a smaller number.
+    # So the flag should extend DOWN (positive y offset)
+    # Scale factors carefully tuned to fit the stem length
+    scaled_verts = [(stem_x + vx * 0.4, stem_top - vy * 0.4) for vx, vy in verts]
+    path = Path(scaled_verts, codes)
     patch = patches.PathPatch(path, facecolor=ink, edgecolor='none', zorder=8)
     ax.add_patch(patch)
 
