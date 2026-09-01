@@ -14,7 +14,7 @@ QuantumSheets is a Python library that renders Qiskit quantum circuits as classi
 
 An 8-qubit implementation of Shor's Algorithm:
 
-![Shor's Algorithm](docs/test_shor_output.png)
+![Shor's Algorithm](docs/test_shor_output.png?v=2)
 
 ## Quickstart
 
