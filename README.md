@@ -24,7 +24,7 @@ pip install QuantumSheets
 
 An 8-qubit implementation of Shor's Algorithm containing custom, 5-qubit mathematical control operations:
 
-![Shor's Algorithm](docs/test_shor_output.png?v=3)
+![Shor's Algorithm](docs/test_shor_output.png?v=4)
 
 ## Quickstart
 
