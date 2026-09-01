@@ -64,7 +64,7 @@ WHOLE_LW        = 2.8           # thicker stroke so whole notes look full
 WHOLE_INNER_W   = 0.26          # inner ellipse to create the classic "double-ring" whole note look
 WHOLE_INNER_H   = 0.30
 
-STEM_X_OFFSET   = NOTE_W * 0.44  # right edge of notehead
+STEM_X_OFFSET   = NOTE_W * 0.48  # right edge of notehead
 STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
 STEM_W          = 0.04          # stem rectangle width (data units)
@@ -154,6 +154,9 @@ def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
         # Draw a thick 'x' cross
         hx = NOTE_W * 0.4
         hy = NOTE_H * 0.5
+        # Background to hide the stem passing under the x
+        bg_circle = mpatches.Circle((x, y), NOTE_W * 0.4, facecolor=bg, edgecolor='none', zorder=7.5)
+        ax.add_patch(bg_circle)
         ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
         ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
     else:
@@ -365,7 +368,7 @@ class StaffCircuitDrawer:
 
         if stem and kind not in ("whole",):
             stem_top = y + STEM_LEN
-            stem_x = x + (0.26 if kind == "whole" else (0.22 if kind == "x_note" else STEM_X_OFFSET))
+            stem_x = x + (0.28 if kind == "whole" else (0.23 if kind == "x_note" else STEM_X_OFFSET))
             _draw_stem(ax, stem_x, y, stem_top, ink=ink)
             if flag:
                 _draw_flag(ax, stem_x, stem_top, ink=ink)
@@ -416,7 +419,7 @@ class StaffCircuitDrawer:
         for i, (q, y_note, kind) in enumerate(notes):
             x_note = x  # all chord notes share the same x-coordinate
 
-            stem_offset = 0.26 if kind == "whole" else (0.20 if kind == "x_note" else STEM_X_OFFSET)
+            stem_offset = 0.28 if kind == "whole" else (0.23 if kind == "x_note" else STEM_X_OFFSET)
             stem_x = x_note + stem_offset
             stem_xs.append(stem_x)
 

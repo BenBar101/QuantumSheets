@@ -1,0 +1,2 @@
+[console_scripts]
+quantumsheets = QuantumSheets.cli:main
