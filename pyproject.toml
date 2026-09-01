@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "QuantumSheets"
-version = "0.1.11"
-description = "Musical staff notation for quantum circuits"
+version = "0.1.12"
+description = "Displaying quantum circuits with classical notes"
 authors = [
     { name = "Ben Bar" }
 ]
