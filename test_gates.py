@@ -19,3 +19,12 @@ qc.rx(1.5, 0)
 qc.rz(0.5, 1)
 qc.barrier()
 qc.measure_all()
+
+print("Qiskit Text Circuit:")
+print(qc.draw())
+
+try:
+    qc.draw('mpl', filename='test_gates_qiskit.png')
+    print("Saved Qiskit mpl drawing to test_gates_qiskit.png")
+except Exception as e:
+    print("Could not draw qiskit mpl:", e)

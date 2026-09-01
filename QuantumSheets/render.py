@@ -662,7 +662,9 @@ class StaffCircuitDrawer:
         n = self.n_qubits
         
         # Calculate full width/height based on systems
-        max_width = max(self.system_end_x) + 1.0 if self.system_end_x else 10.0
+        expected_width = X_START + self.max_cols_per_system * DX + 2.0
+        actual_max = max(self.system_end_x) + 1.0 if self.system_end_x else expected_width
+        max_width = max(expected_width, actual_max)
         y_top_global = self._global_staff_top(0)
         y_bot_global = self._global_staff_bottom(len(self.systems) - 1)
         
