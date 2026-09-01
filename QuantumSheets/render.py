@@ -58,13 +58,13 @@ NOTE_W          = 0.55          # width of notehead ellipse (data units)
 NOTE_H          = 0.40          # height of notehead ellipse
 NOTE_TILT       = 25           # degrees – real noteheads tilt slightly
 HALF_LW         = 2.2           # stroke width for half-note ring
-WHOLE_W         = 0.528         # whole note width (matches stem offset)
+WHOLE_W         = 0.56          # whole note width
 WHOLE_H         = 0.40
 WHOLE_LW        = 2.8           # thicker stroke so whole notes look full
 WHOLE_INNER_W   = 0.26          # inner ellipse to create the classic "double-ring" whole note look
 WHOLE_INNER_H   = 0.30
 
-STEM_X_OFFSET   = NOTE_W * 0.48  # right edge of notehead
+STEM_X_OFFSET   = NOTE_W * 0.44  # right edge of notehead
 STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
 STEM_W          = 0.04          # stem rectangle width (data units)
@@ -116,58 +116,57 @@ def _solfege_offset(ev: GateEvent) -> float:
 
 # ── Helper: draw a notehead patch ────────────────────────────────────
 
-def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
+def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff", x_offset=0.0):
     """
-    Draw a single notehead centred at (x, y).
+    Draw a single notehead centred at (x + x_offset, y).
 
     kind:
         "black" – filled (quarter-note style)
         "half"  – open ring  (half-note style)
         "whole" – filled ring with inner counter cutout, classic whole-note look
     """
+    x_center = x + x_offset
     if kind == "black":
         e = mpatches.Ellipse(
-            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
+            (x_center, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
             facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
         )
         ax.add_patch(e)
     elif kind == "half":
         e = mpatches.Ellipse(
-            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
+            (x_center, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
             facecolor="none", edgecolor=ink, linewidth=HALF_LW, zorder=8,
         )
         ax.add_patch(e)
     elif kind == "whole":
         # Outer filled ellipse
         e_out = mpatches.Ellipse(
-            (x, y), WHOLE_W, WHOLE_H, angle=0,
+            (x_center, y), WHOLE_W, WHOLE_H, angle=0,
             facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
         )
         ax.add_patch(e_out)
         # Inner cutout (background colour)
         e_in = mpatches.Ellipse(
-            (x, y), WHOLE_INNER_W, WHOLE_INNER_H, angle=35,
+            (x_center, y), WHOLE_INNER_W, WHOLE_INNER_H, angle=35,
             facecolor=bg, edgecolor=bg, linewidth=0, zorder=9,
         )
         ax.add_patch(e_in)
     elif kind == "x_note":
-        # Draw a thick 'x' cross extending exactly to the stem
-        hx = STEM_X_OFFSET
+        # Draw a thick 'x' cross
+        hx = NOTE_W * 0.4
         hy = NOTE_H * 0.5
-        # Background to hide the stem passing under the x
-        bg_circle = mpatches.Circle((x, y), STEM_X_OFFSET * 0.95, facecolor=bg, edgecolor='none', zorder=7.5)
-        ax.add_patch(bg_circle)
-        ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
-        ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
+        ax.plot([x_center - hx, x_center + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
+        ax.plot([x_center - hx, x_center + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
     else:
         raise ValueError(f"Unknown notehead kind: {kind!r}  (expected 'black', 'half', 'whole', or 'x_note')")
+
 
 
 def _draw_stem(ax, stem_x, y_bottom, y_top, ink="#1a1a1a"):
     """Draw a thick stem from y_bottom to y_top on the right edge of the notehead."""
     rect = mpatches.Rectangle(
-        (stem_x - STEM_W / 2, y_bottom + STEM_Y_PAD),
-        STEM_W, y_top - (y_bottom + STEM_Y_PAD),
+        (stem_x - STEM_W / 2, y_bottom),
+        STEM_W, y_top - y_bottom,
         facecolor=ink, edgecolor='none', zorder=7,
     )
     ax.add_patch(rect)
@@ -358,18 +357,27 @@ class StaffCircuitDrawer:
                 cur_y -= LINE_SPACING
 
         # 2. Draw actual notehead
+        def _get_x_offset(k):
+            if k == "whole":
+                return STEM_X_OFFSET - (WHOLE_W / 2.0)
+            elif k == "x_note":
+                return STEM_X_OFFSET - (NOTE_W * 0.4)
+            return 0.0
+
         if kind == "measure":
             hx = 0.24
             hy = 0.24
             ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=2.8, zorder=8)
             ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=2.8, zorder=8)
         else:
-            _draw_notehead(ax, x, y, kind=kind, ink=ink, bg=self.style["bg"])
+            x_off = _get_x_offset(kind)
+            _draw_notehead(ax, x, y, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
 
         if stem and kind not in ("whole",):
             stem_top = y + STEM_LEN
             stem_x = x + STEM_X_OFFSET
-            _draw_stem(ax, stem_x, y, stem_top, ink=ink)
+            stem_start = y + NOTE_H * 0.5 if kind == "x_note" else y + STEM_Y_PAD
+            _draw_stem(ax, stem_x, stem_start, stem_top, ink=ink)
             if flag:
                 _draw_flag(ax, stem_x, stem_top, ink=ink)
 
@@ -437,8 +445,24 @@ class StaffCircuitDrawer:
                     ax.plot([x_note - LEDGER_EXTENT, x_note + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                     cur_y -= LINE_SPACING
 
-            _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"])
-            _draw_stem(ax, stem_x, y_note, stem_top, ink=ink)
+            def _get_x_offset(k):
+                if k == "whole":
+                    return STEM_X_OFFSET - (WHOLE_W / 2.0)
+                elif k == "x_note":
+                    return STEM_X_OFFSET - (NOTE_W * 0.4)
+                return 0.0
+            
+            x_off = _get_x_offset(kind)
+            _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
+            
+            if kind == "x_note":
+                stem_start = y_note + NOTE_H * 0.5
+            elif kind == "whole":
+                stem_start = y_note - 0.15
+            else:
+                stem_start = y_note + STEM_Y_PAD
+                
+            _draw_stem(ax, stem_x, stem_start, stem_top, ink=ink)
 
         # Draw horizontal beam connecting all stems at the top
         if len(stem_xs) > 1:
