@@ -4,3 +4,4 @@ __pycache__/
 dist/
 *.egg-info/
 test_gates_output*.png
+test_gates_qiskit.png
