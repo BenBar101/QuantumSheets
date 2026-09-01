@@ -8,6 +8,11 @@ Usage
 -----
     python -m QuantumSheets my_circuit.qasm -o output.png
     python -m QuantumSheets my_circuit.py  -o output.png --style clean
+
+.. warning::
+
+    When loading ``.py`` files the script is **executed** via ``exec()``.
+    Only load files you trust.
 """
 import argparse
 import sys
@@ -49,8 +54,9 @@ def main(argv=None):
                         help="Visual style (default: ink)")
     parser.add_argument("--dpi", type=int, default=200, help="Output resolution")
     parser.add_argument("--title", default=None, help="Optional title above the score")
-    parser.add_argument("--gates-per-measure", type=int, default=3,
-                        help="How many gate columns between barlines")
+    parser.add_argument("--gates-per-measure", "--max-cols-per-system",
+                        dest="max_cols_per_system", type=int, default=12,
+                        help="Max gate columns per system line (default: 12)")
 
     args = parser.parse_args(argv)
 
@@ -63,7 +69,7 @@ def main(argv=None):
         style=args.style,
         dpi=args.dpi,
         title=args.title,
-        gates_per_measure=args.gates_per_measure,
+        max_cols_per_system=args.max_cols_per_system,
     )
     if args.output:
         print(f"Saved to {args.output}")

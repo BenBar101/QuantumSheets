@@ -11,6 +11,7 @@ after all of its wires' previous gates.
 This file has no matplotlib / drawing code in it on purpose, so it can
 be unit-tested or reused by a different renderer later.
 """
+import math
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -29,16 +30,14 @@ class GateEvent:
 
 # qiskit instruction name -> pretty label
 _PRETTY = {
-    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": "S$^{\,\\dagger}$",
-    "t": "T", "tdg": "T$^{\,\\dagger}$", "sx": "√X", "sxdg": "√X$^{\,\\dagger}$", "id": "I",
+    "h": "H", "x": "X", "y": "Y", "z": "Z", "s": "S", "sdg": r"S$^{\,\dagger}$",
+    "t": "T", "tdg": r"T$^{\,\dagger}$", "sx": "√X", "sxdg": r"√X$^{\,\dagger}$", "id": "I",
     "cx": "CNOT", "cy": "CY", "cz": "CZ", "ch": "CH", "swap": "SWAP",
     "ccx": "TOFFOLI", "cswap": "CSWAP", "measure": "MEAS", "barrier": "BARRIER",
     "reset": "RESET",
 }
 
 _PARAM_GATES = {"rx", "ry", "rz", "p", "u", "u1", "u2", "u3", "crx", "cry", "crz", "cp", "cu"}
-
-import math
 
 def _fmt_one_param(p):
     """Format a single parameter, using π notation when possible."""

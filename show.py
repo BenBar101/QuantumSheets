@@ -34,7 +34,6 @@ def main():
     qc.x(2)
     # Finally, measure all qubits
     qc.measure_all()
-
     # 2. Render the circuit as a musical score
     output_filename = "my_circuit_score.png"
     print(f"🎨 Rendering the quantum circuit using QuantumSheets...")

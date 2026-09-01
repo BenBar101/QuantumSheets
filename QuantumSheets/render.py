@@ -13,17 +13,27 @@ and measurements use a long-rest bar with "M" on top.
 import os
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as mpatches
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.textpath import TextPath
+from matplotlib.transforms import Affine2D
+from matplotlib import font_manager
 
 from .layout import circuit_to_moments, GateEvent
 from .brace import draw_vertical_brace
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _CLEF_PATH = os.path.join(_HERE, "clef.png")
+
+# Bravura music font for vector clef glyph (SMuFL U+E050 = treble clef)
+_BRAVURA_PATH = os.path.join(_HERE, "Bravura.otf")
+try:
+    _BRAVURA_PROP = font_manager.FontProperties(fname=_BRAVURA_PATH)
+    _BRAVURA_AVAILABLE = os.path.isfile(_BRAVURA_PATH)
+except Exception:
+    _BRAVURA_AVAILABLE = False
 
 STYLES = {
     "ink":   dict(bg="#efe4c9", ink="#1a1a1a", accent="#c99a2e", paper_edge="#d8c79f"),
@@ -35,7 +45,7 @@ LINE_SPACING    = 0.55          # tight lines, like real sheet music
 N_LINES         = 5
 STAFF_HEIGHT    = (N_LINES - 1) * LINE_SPACING
 STAFF_GAP       = 1.25          # gap between staves
-DX              = 2.4           # horizontal step per moment column
+DX              = 1.6           # horizontal step per moment column
 BARRIER_GAP     = 0.4           # extra gap at barrier barlines
 X_START         = 5.4           # room for left-bar + clef + time-sig
 CLEF_X          = 2.2           # clef close to the left vertical bar
@@ -57,9 +67,15 @@ WHOLE_INNER_H   = 0.30
 STEM_X_OFFSET   = NOTE_W * 0.44  # right edge of notehead
 STEM_LW         = 2.5           # stem thickness (thick like real notes)
 STEM_LEN        = 3.0 * LINE_SPACING  # stem length
+STEM_W          = 0.04          # stem rectangle width (data units)
+STEM_Y_PAD      = 0.06          # vertical pad at notehead junction
 
 GATE_LABEL_SIZE = 28            # font size for gate labels (bigger)
 QLABEL_SIZE     = 42            # qubit label size – fills the staff top to bottom
+
+# Layout scaling
+FIGSIZE_SCALE   = 0.72          # data-units → inches conversion factor
+LEDGER_EXTENT   = NOTE_W * 0.7  # half-width of ledger lines
 
 # ── Solfège pitch mapping ─────────────────────────────────────────────
 _SOLFEGE = {
@@ -141,25 +157,21 @@ def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
         ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
         ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
     else:
-        e = mpatches.Ellipse(
-            (x, y), NOTE_W, NOTE_H, angle=NOTE_TILT,
-            facecolor=ink, edgecolor=ink, linewidth=0.6, zorder=8,
-        )
-        ax.add_patch(e)
+        raise ValueError(f"Unknown notehead kind: {kind!r}  (expected 'black', 'half', 'whole', or 'x_note')")
 
 
 def _draw_stem(ax, stem_x, y_bottom, y_top, ink="#1a1a1a"):
     """Draw a thick stem from y_bottom to y_top on the right edge of the notehead."""
-    import matplotlib.patches as patches
-    stem_w = 0.04  # exact data width for perfect alignment
-    rect = patches.Rectangle((stem_x - stem_w/2, y_bottom + 0.06), stem_w, y_top - (y_bottom + 0.06),
-                             facecolor=ink, edgecolor='none', zorder=7)
+    rect = mpatches.Rectangle(
+        (stem_x - STEM_W / 2, y_bottom + STEM_Y_PAD),
+        STEM_W, y_top - (y_bottom + STEM_Y_PAD),
+        facecolor=ink, edgecolor='none', zorder=7,
+    )
     ax.add_patch(rect)
 
 def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
     """Draw a classical eighth-note flag curving down from the top of the stem."""
     from matplotlib.path import Path
-    import matplotlib.patches as patches
     
     verts = [
         (0.0, 0.0),            # Start at top-right of stem
@@ -182,7 +194,7 @@ def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
     # Scale factors carefully tuned to fit the stem length
     scaled_verts = [(stem_x + vx * 0.4, stem_top + vy * 0.4) for vx, vy in verts]
     path = Path(scaled_verts, codes)
-    patch = patches.PathPatch(path, facecolor=ink, edgecolor='none', zorder=8)
+    patch = mpatches.PathPatch(path, facecolor=ink, edgecolor='none', zorder=8)
     ax.add_patch(patch)
 
 def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
@@ -294,7 +306,7 @@ class StaffCircuitDrawer:
         xs = self.system_xs[sys_idx]
         for i, moment in enumerate(sys_moments):
             global_c = sys_idx * self.max_cols_per_system + i
-            if global_c in self._barrier_cols and global_c not in getattr(self, '_invisible_barrier_cols', set()):
+            if global_c in self._barrier_cols and global_c not in self._invisible_barrier_cols:
                 if i > 0:
                     bl.append((xs[i - 1] + xs[i]) / 2.0)
                 else:
@@ -334,12 +346,12 @@ class StaffCircuitDrawer:
             # Note is above staff
             cur_y = top_line + LINE_SPACING
             while cur_y <= y + eps:
-                ax.plot([x - NOTE_W*0.7, x + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                ax.plot([x - LEDGER_EXTENT, x + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                 cur_y += LINE_SPACING
         elif y < bot_line - eps:
             cur_y = bot_line - LINE_SPACING
             while cur_y >= y - eps:
-                ax.plot([x - NOTE_W*0.7, x + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                ax.plot([x - LEDGER_EXTENT, x + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                 cur_y -= LINE_SPACING
 
         # 2. Draw actual notehead
@@ -402,8 +414,8 @@ class StaffCircuitDrawer:
 
         # Draw all noteheads, their ledger lines, and individual stems
         for i, (q, y_note, kind) in enumerate(notes):
-            x_note = x + i * NOTE_W * 1.5
-            
+            x_note = x  # all chord notes share the same x-coordinate
+
             stem_offset = 0.26 if kind == "whole" else (0.20 if kind == "x_note" else STEM_X_OFFSET)
             stem_x = x_note + stem_offset
             stem_xs.append(stem_x)
@@ -414,12 +426,12 @@ class StaffCircuitDrawer:
             if y_note > top_line + eps:
                 cur_y = top_line + LINE_SPACING
                 while cur_y <= y_note + eps:
-                    ax.plot([x_note - NOTE_W*0.7, x_note + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                    ax.plot([x_note - LEDGER_EXTENT, x_note + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                     cur_y += LINE_SPACING
             elif y_note < bot_line - eps:
                 cur_y = bot_line - LINE_SPACING
                 while cur_y >= y_note - eps:
-                    ax.plot([x_note - NOTE_W*0.7, x_note + NOTE_W*0.7], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
+                    ax.plot([x_note - LEDGER_EXTENT, x_note + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                     cur_y -= LINE_SPACING
 
             _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"])
@@ -427,12 +439,12 @@ class StaffCircuitDrawer:
 
         # Draw horizontal beam connecting all stems at the top
         if len(stem_xs) > 1:
-            import matplotlib.patches as patches
-            stem_w = 0.04
             beam_h = 0.15
-            rect = patches.Rectangle((min(stem_xs) - stem_w/2, stem_top - beam_h), 
-                                     max(stem_xs) - min(stem_xs) + stem_w, beam_h,
-                                     facecolor=ink, edgecolor='none', zorder=7)
+            rect = mpatches.Rectangle(
+                (min(stem_xs) - STEM_W / 2, stem_top - beam_h),
+                max(stem_xs) - min(stem_xs) + STEM_W, beam_h,
+                facecolor=ink, edgecolor='none', zorder=7,
+            )
             ax.add_patch(rect)
 
         # Gate label exactly on top of the center of the beam
@@ -471,43 +483,58 @@ class StaffCircuitDrawer:
         ink = self.style["ink"]
         mid = self._mid_y(qubit, sys_idx)
 
-        # Treble clef – close to the left vertical bar
+        # Treble clef – vector glyph from Bravura, fallback to raster PNG
         clef_y = mid + LINE_SPACING * 0.5
-        self._paste_image(ax, CLEF_X, clef_y, self.clef_img, zoom=0.09)
+        if _BRAVURA_AVAILABLE:
+            clef_char = '\uE050'  # SMuFL treble clef
+            path_clef = TextPath((0, 0), clef_char, size=1, prop=_BRAVURA_PROP)
+            bbox_clef = path_clef.get_extents()
+            if bbox_clef.width > 0 and bbox_clef.height > 0:
+                desired_height = STAFF_HEIGHT * 1.5
+                scale_clef = desired_height / bbox_clef.height
+                offset_x_clef = CLEF_X - (bbox_clef.x0 + bbox_clef.width / 2.0) * scale_clef
+                offset_y_clef = clef_y - (bbox_clef.y0 + bbox_clef.height / 2.0) * scale_clef
+                transform_clef = Affine2D().scale(scale_clef).translate(offset_x_clef, offset_y_clef)
+                patch_clef = mpatches.PathPatch(
+                    path_clef, transform=transform_clef + ax.transData,
+                    facecolor=ink, lw=0, zorder=3,
+                )
+                ax.add_patch(patch_clef)
+            else:
+                # Glyph missing from font — fall back to raster
+                self._paste_image(ax, CLEF_X, clef_y, self.clef_img, zoom=0.065)
+        else:
+            self._paste_image(ax, CLEF_X, clef_y, self.clef_img, zoom=0.065)
 
         # Qubit label – fills the WHOLE staff top to bottom like 4/4
         top = self._staff_top_y(qubit, sys_idx)
         bot = self._staff_bottom_y(qubit, sys_idx)
         mid = self._mid_y(qubit, sys_idx)
-        
-        from matplotlib.textpath import TextPath
-        from matplotlib.transforms import Affine2D
-        import matplotlib.patches as patches
 
         # Using serif font to look like time signature, but straight (not italic)
         path_q = TextPath((0, 0), "q", size=1, prop={'family': 'serif', 'weight': 'bold'})
         bbox_q = path_q.get_extents()
-        
+
         # Scale height exactly to 2 * LINE_SPACING (the top two spaces)
         scale_q = (2.0 * LINE_SPACING) / bbox_q.height
         # Shift down from top line
         offset_y_q = mid - (bbox_q.y0 * scale_q)
         offset_x_q = QLABEL_X - (bbox_q.x0 + bbox_q.width / 2.0) * scale_q
-        
+
         transform_q = Affine2D().scale(scale_q).translate(offset_x_q, offset_y_q)
-        patch_q = patches.PathPatch(path_q, transform=transform_q + ax.transData, facecolor=ink, lw=0, zorder=10)
+        patch_q = mpatches.PathPatch(path_q, transform=transform_q + ax.transData, facecolor=ink, lw=0, zorder=10)
         ax.add_patch(patch_q)
 
         # Qubit number in the bottom two spaces
         path_n = TextPath((0, 0), str(qubit), size=1, prop={'family': 'serif', 'weight': 'bold'})
         bbox_n = path_n.get_extents()
-        
+
         scale_n = (2.0 * LINE_SPACING) / bbox_n.height
         offset_y_n = bot - (bbox_n.y0 * scale_n)
         offset_x_n = QLABEL_X - (bbox_n.x0 + bbox_n.width / 2.0) * scale_n
-        
+
         transform_n = Affine2D().scale(scale_n).translate(offset_x_n, offset_y_n)
-        patch_n = patches.PathPatch(path_n, transform=transform_n + ax.transData, facecolor=ink, lw=0, zorder=10)
+        patch_n = mpatches.PathPatch(path_n, transform=transform_n + ax.transData, facecolor=ink, lw=0, zorder=10)
         ax.add_patch(patch_n)
 
     def _draw_barlines(self, ax, sys_idx):
@@ -570,11 +597,10 @@ class StaffCircuitDrawer:
             return
 
         if ev.kind == "control":
-            base_name = ev.name.lstrip('c')
-            if not base_name and 'cx' in ev.name:
-                base_name = 'x'
-            if not base_name:
-                base_name = ev.name
+            # Derive the base gate name by stripping the control prefix.
+            # Use the known control count rather than fragile lstrip('c').
+            n_ctrl = len(ev.controls)
+            base_name = ev.name[n_ctrl:] if ev.name[n_ctrl:] else ev.name
             target_off = _get_offset_for_name(base_name)
 
             all_q = sorted(ev.qubits)
@@ -618,7 +644,7 @@ class StaffCircuitDrawer:
         height = (y_top_global + pad_top) - (y_bot_global - pad_bot)
 
         if figsize is None:
-            figsize = (max(10.0, max_width * 0.72), max(3.0, height * 0.72))
+            figsize = (max(10.0, max_width * FIGSIZE_SCALE), max(3.0, height * FIGSIZE_SCALE))
 
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         fig.patch.set_facecolor(self.style["bg"])
@@ -634,7 +660,7 @@ class StaffCircuitDrawer:
                 self._draw_clef_and_label(ax, q, sys_idx)
 
             draw_vertical_brace(ax, BRACE_X, y_top, y_bot,
-                                color=self.style["ink"], lw=1.8)
+                                color=self.style["ink"])
 
             self._draw_barlines(ax, sys_idx)
 

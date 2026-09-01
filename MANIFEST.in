@@ -1,1 +1,1 @@
-recursive-include QuantumSheets/assets *
+recursive-include QuantumSheets *.png *.otf
