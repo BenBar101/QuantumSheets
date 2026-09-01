@@ -7,9 +7,17 @@ Instead of traditional blocky quantum circuit diagrams, QuantumSheets draws your
 ## Features
 - **Native Qiskit Support**: Pass in any standard `qiskit.QuantumCircuit` object.
 - **Musical Aesthetics**: Notes for single-qubit gates, chords for multi-qubit gates, proper stems, and clefs!
+- **MathText Rendering**: Supports full LaTeX/MathText inside gate labels (e.g., wrap your custom gate name in `$` like `"$7^{1} \\% 15$"` and it beautifully renders superscripts).
 - **Multi-System Wrapping**: Automatically wraps long circuits across multiple "systems" (lines) like real sheet music.
-- **Strip Mode**: Toggle `strip=True` to render the entire circuit as one continuous horizontal line.
-- **Smart Barriers**: Respects `measure_all()` barriers while maintaining visual cleanness.
+- **Dynamic Spacing**: Gracefully expands the columns backward and forward if a gate has a very long name, perfectly mirroring professional music engraving.
+
+## Shor's Algorithm Example
+
+QuantumSheets can easily handle complex, multi-qubit custom logic—like this 8-qubit implementation of Shor's Algorithm (factoring $15$ with $a=7$):
+
+![Shor's Algorithm](docs/test_shor_output.png)
+
+This demonstrates the engine's ability to seamlessly draw multi-qubit control chords, handle long MathText labels underneath chords, and balance spacing without overcrowding the page.
 
 ## Quickstart
 
