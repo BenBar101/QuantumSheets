@@ -52,11 +52,12 @@ def main(argv=None):
                         help="Output filename (png/svg/pdf). Default: show in window.")
     parser.add_argument("--style", choices=("ink", "clean"), default="ink",
                         help="Visual style (default: ink)")
-    parser.add_argument("--dpi", type=int, default=200, help="Output resolution")
+    parser.add_argument("--dpi", type=int, default=100, help="Output resolution (default: 100 to match Qiskit)")
     parser.add_argument("--title", default=None, help="Optional title above the score")
     parser.add_argument("--gates-per-measure", "--max-cols-per-system",
-                        dest="max_cols_per_system", type=int, default=12,
-                        help="Max gate columns per system line (default: 12)")
+                        dest="max_cols_per_system", type=int, default=36,
+                        help="Max gate columns per system line (default: 36)")
+    parser.add_argument("--audio", action="store_true", help="Generate a .wav audio file of the circuit.")
 
     args = parser.parse_args(argv)
 
@@ -73,6 +74,10 @@ def main(argv=None):
     )
     if args.output:
         print(f"Saved to {args.output}")
+        if args.audio:
+            from .audio import generate_audio
+            audio_out = args.output.rsplit(".", 1)[0] + ".wav"
+            generate_audio(qc, audio_out)
     else:
         import matplotlib.pyplot as plt
         plt.show()
