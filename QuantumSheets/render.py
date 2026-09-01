@@ -276,6 +276,12 @@ class StaffCircuitDrawer:
             self.system_xs.append(xs)
             self.system_end_x.append(end_x)
 
+        # Force all systems to span the expected full page width
+        expected_width = X_START + self.max_cols_per_system * DX + 0.6
+        actual_max = max(self.system_end_x) if self.system_end_x else expected_width
+        page_width = max(expected_width, actual_max)
+        self.system_end_x = [page_width] * len(self.systems)
+
     def _sys_offset_y(self, sys_idx: int) -> float:
         # Each system takes up space for all qubits plus top/bottom padding
         pad_top = 2.4
