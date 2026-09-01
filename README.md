@@ -21,6 +21,7 @@ An 8-qubit implementation of Shor's Algorithm:
 ```python
 from qiskit import QuantumCircuit
 from QuantumSheets import draw_circuit
+from QuantumSheets.audio import generate_audio
 
 qc = QuantumCircuit(3)
 qc.h(0)
@@ -28,16 +29,19 @@ qc.cx(0, 1)
 qc.cx(1, 2)
 qc.measure_all()
 
-# Render circuit to image
-draw_circuit(qc, filename="circuit.png", strip=True)
+# Render circuit to image (supports "ink" and "clean" styles)
+draw_circuit(qc, filename="circuit.png", style="clean", strip=True)
+
+# Synthesize the circuit's audio to a WAV file
+generate_audio(qc, filename="circuit.wav", bpm=120)
 ```
 
 ### CLI Usage
 
-You can generate images and audio directly from the command line:
+You can generate both images and audio directly from the command line, and specify the output style:
 
 ```bash
-python -m QuantumSheets.cli my_circuit.py -o output.png --audio
+python -m QuantumSheets.cli my_circuit.py -o output.png --style clean --audio
 ```
 
 ## License
