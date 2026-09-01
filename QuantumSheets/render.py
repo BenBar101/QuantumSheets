@@ -726,10 +726,23 @@ class StaffCircuitDrawer:
             offsets = []
             note_labels = []
             
-            # Determine if this control gate needs a target label
             needs_target_label = True
             if "swap" in ev.name:
                 needs_target_label = False
+            
+            target_label = None
+            if needs_target_label:
+                if base_name == "x":
+                    target_label = "X"
+                else:
+                    target_label = ev.label.lstrip("C")
+                    
+            if len(ev.targets) > 1 and target_label != "X":
+                # For multi-target generic controls, draw the label ON the chord beam
+                chord_label = target_label
+                target_label = None
+            else:
+                chord_label = None
                 
             for q in all_q:
                 if q in ctrl_set:
@@ -739,16 +752,9 @@ class StaffCircuitDrawer:
                 else:
                     kinds.append("x_note" if "swap" in ev.name else "whole")
                     offsets.append(target_off)
-                    
-                    target_label = None
-                    if needs_target_label:
-                        if base_name == "x":
-                            target_label = "X"
-                        else:
-                            target_label = ev.label.lstrip("C")
                     note_labels.append(target_label)
                     
-            self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, note_labels=note_labels)
+            self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, note_labels=note_labels, label=chord_label)
             return
 
         # Generic multi-qubit fallback (e.g. rzz, rxx, swap)
