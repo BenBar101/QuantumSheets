@@ -458,7 +458,7 @@ class StaffCircuitDrawer:
             if kind == "x_note":
                 stem_start = y_note + NOTE_H * 0.5
             elif kind == "whole":
-                stem_start = y_note - 0.15
+                stem_start = y_note
             else:
                 stem_start = y_note + STEM_Y_PAD
                 
