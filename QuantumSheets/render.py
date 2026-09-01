@@ -698,7 +698,8 @@ class StaffCircuitDrawer:
         if ev.kind == "measure":
             q = ev.targets[0]
             y = self._y_of(q, sys_idx, 0.0)
-            _draw_measure_symbol(ax, x, y, ink=ink)
+            # Shift measure symbols slightly to the right to sit closer to the barline
+            _draw_measure_symbol(ax, x + DX * 0.4, y, ink=ink)
             return
 
         if ev.kind == "single":
