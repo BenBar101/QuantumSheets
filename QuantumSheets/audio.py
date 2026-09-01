@@ -27,7 +27,12 @@ def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
     
     # We will generate audio track per qubit to handle spans/sustains
     n_qubits = qc.num_qubits
-    total_beats = len(moments)
+    # Calculate total beats based on the maximum (start column + span) of any gate
+    total_beats = 0
+    for c, moment in enumerate(moments):
+        for ev in moment:
+            total_beats = max(total_beats, c + ev.span)
+            
     total_samples = int(total_beats * beat_duration * sample_rate)
     
     # Audio buffer for the whole song
@@ -59,17 +64,13 @@ def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
             start_sample = int(c * beat_duration * sample_rate)
             end_sample = min(start_sample + dur_samples, total_samples)
             actual_dur = end_sample - start_sample
-            
             if actual_dur <= 0:
                 continue
-                
+            
             t = np.linspace(0, actual_dur / sample_rate, actual_dur, False)
             
-            # Simple sine wave synthesizer
-            wave = np.sin(2 * np.pi * freq * t)
-            
             # Apply ADSR envelope to avoid clicking
-            env = np.ones_like(wave)
+            env = np.ones_like(t)
             att_samples = int(attack * sample_rate)
             rel_samples = int(release * sample_rate)
             
@@ -77,15 +78,22 @@ def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
                 env[:att_samples] = np.linspace(0, 1, att_samples)
             if rel_samples > 0 and rel_samples < actual_dur:
                 env[-rel_samples:] = np.linspace(1, 0, rel_samples)
-                
-            wave *= env
             
-            # Add to main buffer (for each qubit involved in the gate, to make chords louder if they span multiple wires? Or just play it once per wire?)
-            # The gate appears on all its qubits, so let's play the note for EACH wire it touches, creating a richer sound for multi-qubit gates!
-            # Wait, if we play the exact same frequency for each wire, it just gets louder.
-            # Let's just play it once per wire (scaled down).
-            for _ in ev.qubits:
-                audio_data[start_sample:end_sample] += wave * 0.15
+            # The gate appears on all its qubits. To make multi-qubit gates sound like 
+            # beautiful chords, we map each participating qubit to a harmonious interval!
+            # Intervals: 0 = unison, 1 = major 3rd (1.25x), 2 = perfect 5th (1.5x), 3 = octave (2.0x), 4 = major 10th (2.5x)
+            intervals = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+            
+            for i, q in enumerate(ev.qubits):
+                interval = intervals[i % len(intervals)]
+                freq_q = freq * interval
+                
+                # Re-synthesize for this specific frequency
+                wave_q = np.sin(2 * np.pi * freq_q * t) * env
+                
+                # Mix it in! (divide volume by number of notes so chords aren't deafening)
+                vol = 0.2 / len(ev.qubits)
+                audio_data[start_sample:end_sample] += wave_q * vol
 
     # Normalize to 16-bit PCM
     max_val = np.max(np.abs(audio_data))
