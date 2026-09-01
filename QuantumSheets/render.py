@@ -46,7 +46,7 @@ N_LINES         = 5
 STAFF_HEIGHT    = (N_LINES - 1) * LINE_SPACING
 STAFF_GAP       = 1.25          # gap between staves
 DX              = 1.6           # horizontal step per moment column
-BARRIER_GAP     = 0.4           # extra gap at barrier barlines
+BARRIER_GAP     = 0.8           # extra gap at barrier barlines
 X_START         = 5.4           # room for left-bar + clef + time-sig
 CLEF_X          = 2.2           # clef close to the left vertical bar
 QLABEL_X        = 3.6           # q-label (time signature) after clef
@@ -79,36 +79,53 @@ LEDGER_EXTENT   = NOTE_W * 0.7  # half-width of ledger lines
 
 # ── Solfège pitch mapping ─────────────────────────────────────────────
 _SOLFEGE = {
-    # ── standard gates ──
-    "h":      +2.5,     # space above top line
-    "x":      +2.0,     # top line
-    "sx":     +1.5,     # space below top line
-    "sxdg":   +1.5,
-    "y":      +1.0,     # 2nd line from top
-    "id":      0.0,     # middle line
-    "z":      -1.0,     # 2nd line from bottom
-    "s":      -2.0,     # bottom line
-    "sdg":    -2.0,
-    "t":      -3.0,     # ledger line below bottom
-    "tdg":    -3.0,
-    "reset":  -4.0,     # double ledger line below
-
-    # ── parameterised single-qubit gates ──
-    "rx":     +0.5,     # space above middle line
-    "ry":     -0.5,     # space below middle line
-    "rz":     -1.5,     # space above bottom line
-    "p":      -2.5,     # space below bottom line
+    # Mi (bottom line)
+    "reset":  -2.0,
     
-    "u1":     +3.0,     # ledger line above top
-    "u2":     +3.5,     # space above ledger line
-    "u3":     +4.0,     # double ledger line above
+    # Fa (space above bottom line)
+    "rx":     -1.5,
+    "ry":     -1.5,
+    "rz":     -1.5,
+    "crx":    -1.5,
+    "cry":    -1.5,
+    "crz":    -1.5,
+    
+    # Sol (2nd line from bottom)
+    "x":      -1.0,
+    "y":      -1.0,
+    "z":      -1.0,
+    
+    # La (space below middle line)
+    "t":      -0.5,
+    "tdg":    -0.5,
+    
+    # Si (middle line)
+    "id":      0.0,
+    "u":       0.0,
+    "cu":      0.0,
+    
+    # Do (space above middle line)
+    "p":      +0.5,
+    "cp":     +0.5,
+    
+    # Re (4th line from bottom)
+    "h":      +1.0,
+    
+    # Mi (space below top line)
+    "s":      +1.5,
+    "sdg":    +1.5,
+    
+    # Fa (top line)
+    "sx":     +2.0,
+    "sxdg":   +2.0,
 }
 
 def _get_offset_for_name(name: str) -> float:
     if name in _SOLFEGE:
         return _SOLFEGE[name]
+    # Default behavior for anything unspecified
     if name.startswith("r"):
-        return +1.0
+        return -1.5
     return 0.0
 
 def _solfege_offset(ev: GateEvent) -> float:
@@ -220,22 +237,32 @@ def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
 
 
 class StaffCircuitDrawer:
-    def __init__(self, qc, style="clean", max_cols_per_system=12, title=None, strip=False):
+    def __init__(self, qc, style="clean", max_cols_per_system=36, title=None, strip=False):
         self.qc = qc
         self.n_qubits = qc.num_qubits
         self.style = STYLES[style]
         self.title = title
+        self.strip = strip
         self.moments = circuit_to_moments(qc)
         self.n_cols = len(self.moments)
-        self.max_cols_per_system = max(1, self.n_cols) if strip else max(1, max_cols_per_system)
+        self.max_cols_per_system_arg = max(1, max_cols_per_system)
+        self.max_cols_per_system = max(1, self.n_cols) if strip else self.max_cols_per_system_arg
         
         # Split moments into multi-system lines
         self.systems = []
-        for i in range(0, self.n_cols, self.max_cols_per_system):
-            self.systems.append(self.moments[i:i+self.max_cols_per_system])
-            
-        if not self.systems:
+        if self.n_cols == 0:
             self.systems = [[]]
+        else:
+            # Balance columns evenly across the required number of systems
+            # so we don't end up with a system that has only 1 or 2 gates
+            n_sys = (self.n_cols + self.max_cols_per_system - 1) // self.max_cols_per_system
+            cols_per_sys = (self.n_cols + n_sys - 1) // n_sys
+            
+            self.actual_cols_per_system = cols_per_sys
+            self.max_cols_per_system = cols_per_sys
+            
+            for i in range(0, self.n_cols, cols_per_sys):
+                self.systems.append(self.moments[i:i+cols_per_sys])
 
         # Identify barrier columns globally
         self._barrier_cols = set()
@@ -271,16 +298,15 @@ class StaffCircuitDrawer:
                 if global_c not in self._empty_barrier_cols:
                     x += DX
             
-            # The final barline is drawn further to the right to clear any beamed chords
-            end_x = (xs[-1] if xs else X_START) + DX * 0.6
+            # The final barline is drawn further to the right to avoid overlapping gate labels
+            end_x = (xs[-1] if xs else X_START) + DX * 1.2
             self.system_xs.append(xs)
             self.system_end_x.append(end_x)
 
-        # Force all systems to span the expected full page width
-        expected_width = X_START + self.max_cols_per_system * DX + 0.6
-        actual_max = max(self.system_end_x) if self.system_end_x else expected_width
-        page_width = max(expected_width, actual_max)
-        self.system_end_x = [page_width] * len(self.systems)
+        # Remove artificial page width forcing. 
+        # Each system will just extend exactly as far as its last gate.
+        # But for the bounding box of the whole image, we track max_width.
+        pass
 
     def _sys_offset_y(self, sys_idx: int) -> float:
         # Each system takes up space for all qubits plus top/bottom padding
@@ -363,11 +389,16 @@ class StaffCircuitDrawer:
                 cur_y -= LINE_SPACING
 
         # 2. Draw actual notehead
+        # Determine stem direction based on classical music rules
+        # If the note is above the middle line, stem goes down.
+        mid_y = self._mid_y(qubit, sys_idx)
+        stem_dir = -1 if y > mid_y else 1
+        
         def _get_x_offset(k):
             if k == "whole":
-                return STEM_X_OFFSET - (WHOLE_W / 2.0)
+                return stem_dir * (STEM_X_OFFSET - (WHOLE_W / 2.0))
             elif k == "x_note":
-                return STEM_X_OFFSET - (NOTE_W * 0.4)
+                return stem_dir * (STEM_X_OFFSET - (NOTE_W * 0.4))
             return 0.0
 
         if kind == "measure":
@@ -380,60 +411,80 @@ class StaffCircuitDrawer:
             _draw_notehead(ax, x, y, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
 
         if stem and kind not in ("whole",):
-            stem_top = y + STEM_LEN
-            stem_x = x + STEM_X_OFFSET
-            stem_start = y + NOTE_H * 0.5 if kind == "x_note" else y + STEM_Y_PAD
-            _draw_stem(ax, stem_x, stem_start, stem_top, ink=ink)
+            stem_y_end = y - STEM_LEN if stem_dir == -1 else y + STEM_LEN
+            stem_offset = -STEM_X_OFFSET if stem_dir == -1 else STEM_X_OFFSET
+            stem_x = x + stem_offset
+            
+            pad = NOTE_H * 0.5 if kind == "x_note" else STEM_Y_PAD
+            stem_start = y + stem_dir * pad
+            
+            if stem_dir == 1:
+                _draw_stem(ax, stem_x, stem_start, stem_y_end, ink=ink)
+            else:
+                _draw_stem(ax, stem_x, stem_y_end, stem_start, ink=ink)
+                
             if flag:
-                _draw_flag(ax, stem_x, stem_top, ink=ink)
+                # Flags might need to be flipped if stem goes down, but keeping simple for now
+                _draw_flag(ax, stem_x, stem_y_end, ink=ink)
 
         if gate_label:
-            # Place label to the right of the note, slightly closer
-            label_x = x + NOTE_W * 0.8
-            
-            # If the label has parameters (parentheses) and is long, put params underneath
-            if "(" in gate_label and len(gate_label) > 4:
-                base, params = gate_label.split("(", 1)
-                params = "(" + params
-                
-                # Base name next to note
-                self._text(ax, label_x, y, base,
-                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                           ha="left", va="center")
-                # Params underneath the base name, smaller and normal weight
-                self._text(ax, label_x, y - LINE_SPACING * 0.85, params,
-                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
-                           ha="left", va="center")
-            else:
-                self._text(ax, label_x, y, gate_label,
-                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                           ha="left", va="center")
+            self._draw_label_next_to_note(ax, x, y, gate_label)
 
-    def _chord(self, ax, x, qubits, sys_idx, kinds=None, offsets=None, label=None):
+    def _draw_label_next_to_note(self, ax, x, y, label_text):
+        visual_label = label_text.replace("$", "").replace("^{\\,\\dagger}", "dg").replace("\\,", "")
+        
+        # If the gate name is long, put it under the note
+        if len(visual_label) > 3 or "(" in label_text:
+            if "(" in label_text:
+                base, params = label_text.split("(", 1)
+                params = "(" + params
+                self._text(ax, x, y - LINE_SPACING * 1.6, base,
+                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                           ha="center", va="top")
+                self._text(ax, x, y - LINE_SPACING * 2.5, params,
+                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
+                           ha="center", va="top")
+            else:
+                self._text(ax, x, y - LINE_SPACING * 1.6, label_text,
+                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                           ha="center", va="top")
+        else:
+            label_x = x + NOTE_W * 0.8
+            self._text(ax, label_x, y, label_text,
+                       size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                       ha="left", va="center")
+
+    def _chord(self, ax, x, qubits, sys_idx, kinds=None, offsets=None, label=None, note_labels=None):
         """
-        Draw a multi-qubit gate as a musical chord.
-        Notes on different staves are connected by a single long stem.
-        The gate label sits precisely ON TOP of the stem.
+        Draw a group of notes on the same vertical line (a chord) connected by a single stem.
         """
         ink = self.style["ink"]
-        if offsets is None:
-            offsets = [0.0] * len(qubits)
-            
-        ys = [self._y_of(q, sys_idx, off) for q, off in zip(qubits, offsets)]
-        y_min, y_max = min(ys), max(ys)
-
         if kinds is None:
             kinds = ["black"] * len(qubits)
+        if offsets is None:
+            offsets = [0.0] * len(qubits)
+        if note_labels is None:
+            note_labels = [None] * len(qubits)
 
-        notes = sorted(zip(qubits, ys, kinds), key=lambda item: item[1], reverse=True)
-        stem_top = y_max + STEM_LEN
+        ys = [self._y_of(q, sys_idx, off) for q, off in zip(qubits, offsets)]
+        # sort so highest y (top of staff) is first
+        notes = sorted(zip(qubits, ys, kinds, note_labels), key=lambda item: item[1], reverse=True)
+        y_max = notes[0][1]
+        y_min = notes[-1][1]
+        
+        # Determine stem direction based on classical music rules
+        mean_y = sum(ys) / len(ys)
+        avg_mid = sum(self._mid_y(q, sys_idx) for q in set(qubits)) / len(set(qubits))
+        stem_dir = -1 if mean_y > avg_mid else 1
+        
+        stem_y_end = y_min - STEM_LEN if stem_dir == -1 else y_max + STEM_LEN
         stem_xs = []
 
         # Draw all noteheads, their ledger lines, and individual stems
-        for i, (q, y_note, kind) in enumerate(notes):
+        for i, (q, y_note, kind, note_label) in enumerate(notes):
             x_note = x  # all chord notes share the same x-coordinate
 
-            stem_offset = STEM_X_OFFSET
+            stem_offset = STEM_X_OFFSET if stem_dir == 1 else -STEM_X_OFFSET
             stem_x = x_note + stem_offset
             stem_xs.append(stem_x)
 
@@ -453,53 +504,73 @@ class StaffCircuitDrawer:
 
             def _get_x_offset(k):
                 if k == "whole":
-                    return STEM_X_OFFSET - (WHOLE_W / 2.0)
+                    return stem_dir * (STEM_X_OFFSET - (WHOLE_W / 2.0))
                 elif k == "x_note":
-                    return STEM_X_OFFSET - (NOTE_W * 0.4)
+                    return stem_dir * (STEM_X_OFFSET - (NOTE_W * 0.4))
                 return 0.0
             
             x_off = _get_x_offset(kind)
             _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
             
             if kind == "x_note":
-                stem_start = y_note + NOTE_H * 0.5
+                pad = NOTE_H * 0.5
             elif kind == "whole":
-                stem_start = y_note
+                pad = 0.0
             else:
-                stem_start = y_note + STEM_Y_PAD
+                pad = STEM_Y_PAD
                 
-            _draw_stem(ax, stem_x, stem_start, stem_top, ink=ink)
+            stem_start = y_note + stem_dir * pad
+            
+            if stem_dir == 1:
+                _draw_stem(ax, stem_x, stem_start, stem_y_end, ink=ink)
+            else:
+                _draw_stem(ax, stem_x, stem_y_end, stem_start, ink=ink)
+            
+            if note_label:
+                self._draw_label_next_to_note(ax, x_note, y_note, note_label)
 
         # Draw horizontal beam connecting all stems at the top
         if len(stem_xs) > 1:
             beam_h = 0.15
+            rect_y = stem_y_end - beam_h if stem_dir == 1 else stem_y_end
             rect = mpatches.Rectangle(
-                (min(stem_xs) - STEM_W / 2, stem_top - beam_h),
+                (min(stem_xs) - STEM_W / 2, rect_y),
                 max(stem_xs) - min(stem_xs) + STEM_W, beam_h,
                 facecolor=ink, edgecolor='none', zorder=7,
             )
             ax.add_patch(rect)
 
-        # Gate label exactly on top of the center of the beam
+        # Gate label exactly on top (or bottom) of the center of the beam
         if label:
             cx = (min(stem_xs) + max(stem_xs)) / 2.0
+            
+            y_offset = 0.1 if stem_dir == 1 else -0.1
+            va = "bottom" if stem_dir == 1 else "top"
             
             if "(" in label:
                 base, params = label.split("(", 1)
                 params = "(" + params
                 
-                # Base on the left, closer to beam
-                self._text(ax, cx - 0.01, stem_top + LINE_SPACING * 0.02, base,
-                           size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
-                           ha="right", va="bottom")
-                # Params on the right, same height
-                self._text(ax, cx + 0.01, stem_top + LINE_SPACING * 0.02, params,
-                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
-                           ha="left", va="bottom")
+                if stem_dir == 1:
+                    # Stems up: text goes on top of beam
+                    self._text(ax, cx, stem_y_end + y_offset, base,
+                               size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                               ha="center", va=va)
+                    self._text(ax, cx, stem_y_end + y_offset + LINE_SPACING * 0.8, params,
+                               size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
+                               ha="center", va=va)
+                else:
+                    # Stems down: text goes below beam
+                    self._text(ax, cx, stem_y_end + y_offset - LINE_SPACING * 0.8, base,
+                               size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                               ha="center", va=va)
+                    self._text(ax, cx, stem_y_end + y_offset, params,
+                               size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
+                               ha="center", va=va)
             else:
-                self._text(ax, cx, stem_top + LINE_SPACING * 0.02, label,
-                           size=GATE_LABEL_SIZE * 1.2, weight="bold", style="italic",
-                           ha="center", va="bottom")
+                self._text(ax, cx, stem_y_end + y_offset, label,
+                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                           ha="center", va=va)
 
     # ---------- staves ----------
     def _draw_staff_lines(self, ax, qubit, sys_idx):
@@ -604,6 +675,21 @@ class StaffCircuitDrawer:
     # ---------- gate rendering ----------
     def _draw_event(self, ax, ev: GateEvent, sys_idx: int, local_i: int):
         x = self.system_xs[sys_idx][local_i]
+        
+        if ev.kind == "rest":
+            # Draw a quarter rest (1/4 pause symbol) using Bravura font
+            y_line = self._mid_y(ev.qubits[0], sys_idx)
+            if _BRAVURA_AVAILABLE:
+                ax.text(x, y_line, "\uE4E4", fontproperties=_BRAVURA_PROP,
+                        size=36, color=self.style["ink"],
+                        ha="center", va="center", zorder=8)
+            else:
+                # Fallback quarter rest symbol if font is missing
+                ax.text(x, y_line, "𝄽", fontfamily="DejaVu Sans",
+                        size=28, color=self.style["ink"],
+                        ha="center", va="center", zorder=8)
+            return
+
         ink = self.style["ink"]
 
         if ev.kind == "barrier":
@@ -626,12 +712,10 @@ class StaffCircuitDrawer:
 
         if ev.kind == "swap":
             qubits = sorted([ev.targets[0], ev.targets[1]])
-            self._chord(ax, x, qubits, sys_idx, kinds=["x_note", "x_note"], label="SWAP")
+            self._chord(ax, x, qubits, sys_idx, kinds=["x_note", "x_note"])
             return
 
         if ev.kind == "control":
-            # Derive the base gate name by stripping the control prefix.
-            # Use the known control count rather than fragile lstrip('c').
             n_ctrl = len(ev.controls)
             base_name = ev.name[n_ctrl:] if ev.name[n_ctrl:] else ev.name
             target_off = _get_offset_for_name(base_name)
@@ -640,16 +724,31 @@ class StaffCircuitDrawer:
             ctrl_set = set(ev.controls)
             kinds = []
             offsets = []
+            note_labels = []
+            
+            # Determine if this control gate needs a target label
+            needs_target_label = True
+            if "swap" in ev.name:
+                needs_target_label = False
+                
             for q in all_q:
                 if q in ctrl_set:
-                    # Controls are regular (black) notes
                     kinds.append("black")
                     offsets.append(0.0) 
+                    note_labels.append(None)
                 else:
-                    # Targets are full (whole) notes
                     kinds.append("x_note" if "swap" in ev.name else "whole")
                     offsets.append(target_off)
-            self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, label=ev.label)
+                    
+                    target_label = None
+                    if needs_target_label:
+                        if base_name == "x":
+                            target_label = "X"
+                        else:
+                            target_label = ev.label.lstrip("C")
+                    note_labels.append(target_label)
+                    
+            self._chord(ax, x, all_q, sys_idx, kinds=kinds, offsets=offsets, note_labels=note_labels)
             return
 
         # Generic multi-qubit fallback (e.g. rzz, rxx, swap)
@@ -664,13 +763,11 @@ class StaffCircuitDrawer:
         self._chord(ax, x, all_q, sys_idx, kinds=[target_kind] * len(all_q), offsets=offsets, label=ev.label)
 
     # ---------- public entry point ----------
-    def draw(self, figsize=None, dpi=170):
+    def draw(self, figsize=None, dpi=100):
         n = self.n_qubits
         
         # Calculate full width/height based on systems
-        expected_width = X_START + self.max_cols_per_system * DX + 2.0
-        actual_max = max(self.system_end_x) + 1.0 if self.system_end_x else expected_width
-        max_width = max(expected_width, actual_max)
+        max_width = max(self.system_end_x) + 0.5 if self.system_end_x else X_START + 2.0
         y_top_global = self._global_staff_top(0)
         y_bot_global = self._global_staff_bottom(len(self.systems) - 1)
         
@@ -715,8 +812,8 @@ class StaffCircuitDrawer:
         return fig
 
 
-def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=12,
-                 title=None, dpi=200, strip=False):
+def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=36,
+                 title=None, dpi=100, strip=False):
     drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title, strip=strip)
     fig = drawer.draw(dpi=dpi)
     if filename:

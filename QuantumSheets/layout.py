@@ -25,6 +25,8 @@ class GateEvent:
     targets: List[int]            # subset of qubits that are "acted upon" (targets)
     clbits: List[int] = field(default_factory=list)
     kind: str = "generic"         # "single" | "control" | "swap" | "measure" | "barrier" | "generic"
+    params: str = ""              # Formatted parameter string
+    span: int = 1                 # Number of columns this gate occupies horizontally
     column: int = 0
 
 
@@ -93,6 +95,7 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
     n_qubits = qc.num_qubits
     next_free_col = [0] * n_qubits          # next available column per qubit wire
     events: List[GateEvent] = []
+    multi_col_spans = {}
 
     for instr in qc.data:
         op = instr.operation
@@ -107,7 +110,7 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         if not q_idx:
             continue
 
-        col = max(next_free_col[q] for q in q_idx)
+        is_multi = len(q_idx) > 1 and name != "barrier"
 
         if name == "barrier":
             kind = "barrier"
@@ -119,14 +122,10 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         elif name == "swap":
             kind = "swap"
             controls, targets = [], q_idx
-        elif len(q_idx) >= 2 and name.startswith("c") and name not in ("cswap",):
-            # cx, cy, cz, ch, crx, cry, crz, cp, cu, ccx (toffoli), mcx...
+        elif hasattr(op, "num_ctrl_qubits") and op.num_ctrl_qubits > 0:
             kind = "control"
-            n_ctrl = len(q_idx) - 1
+            n_ctrl = op.num_ctrl_qubits
             controls, targets = q_idx[:n_ctrl], q_idx[n_ctrl:]
-        elif name == "cswap":
-            kind = "control"  # controlled-swap: draw control + swap pair as generic control group
-            controls, targets = [q_idx[0]], q_idx[1:]
         elif len(q_idx) == 1:
             kind = "single"
             controls, targets = [], q_idx
@@ -134,21 +133,80 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
             kind = "generic"
             controls, targets = [], q_idx
 
-        label = _pretty_label(name, getattr(op, "params", []))
+        if hasattr(op, "label") and op.label:
+            ev_label = str(op.label)
+        elif name in _PRETTY:
+            ev_label = _PRETTY[name]
+        elif kind == "single":
+            if name.startswith("r") and len(name) == 2:
+                ev_label = name.upper()
+            else:
+                ev_label = name.capitalize()
+        else:
+            ev_label = name.upper()
+
+        params_str = ""
+        if hasattr(op, "params") and op.params and kind not in ("measure", "barrier"):
+            params_str = _fmt_params(op.params)
+            
+        # Determine gate padding (how many extra columns it needs on each side)
+        import re
+        visual_label = re.sub(r'\\[a-zA-Z]+', '', ev_label) # remove \ commands like \dagger, \pi, \pm
+        visual_label = re.sub(r'[\$\{\}\\\^]', '', visual_label) # remove $, {, }, \, ^
+        
+        total_len = max(len(visual_label), len(params_str))
+        
+        # A column (DX=1.6) fits about 4-5 characters. 
+        # pad=1 adds a column on BOTH sides (total 3 columns, ~14 chars)
+        pad = 0
+        if total_len > 3:
+            pad = (total_len - 1) // 5
+            
+        # Push the gate forward so it has empty space before it
+        col = max(next_free_col[q] for q in q_idx) + pad
+            
+        if is_multi:
+            min_q, max_q = min(q_idx), max(q_idx)
+            # Find a column where this gate (including padding) doesn't vertically overlap
+            while True:
+                overlap = False
+                for c_offset in range(-pad, pad + 1):
+                    spans = multi_col_spans.get(col + c_offset, [])
+                    for (sq_min, sq_max) in spans:
+                        if not (max_q < sq_min or min_q > sq_max):
+                            overlap = True
+                            break
+                    if overlap:
+                        break
+                if overlap:
+                    col += 1
+                else:
+                    for c_offset in range(-pad, pad + 1):
+                        multi_col_spans.setdefault(col + c_offset, []).append((min_q, max_q))
+                    break
+
         ev = GateEvent(
-            name=name, label=label, qubits=q_idx, controls=controls,
-            targets=targets, clbits=c_idx, kind=kind, column=col,
+            name=name,
+            kind=kind,
+            qubits=q_idx,
+            clbits=c_idx,
+            controls=controls,
+            targets=targets,
+            label=ev_label,
+            params=params_str,
+            span=pad * 2 + 1,
+            column=col
         )
-        events.append(ev)
+        events.append((col, ev))
 
         for q in q_idx:
-            next_free_col[q] = col + 1
+            next_free_col[q] = col + pad + 1
 
-    if not events:
-        return []
+    # Group by column
+    max_c = max(next_free_col) if events else 0
+    moments = [[] for _ in range(max_c)]
+    
+    for c, ev in events:
+        moments[c].append(ev)
 
-    n_cols = max(e.column for e in events) + 1
-    moments: List[List[GateEvent]] = [[] for _ in range(n_cols)]
-    for e in events:
-        moments[e.column].append(e)
     return moments
