@@ -58,7 +58,7 @@ NOTE_W          = 0.55          # width of notehead ellipse (data units)
 NOTE_H          = 0.40          # height of notehead ellipse
 NOTE_TILT       = 25           # degrees – real noteheads tilt slightly
 HALF_LW         = 2.2           # stroke width for half-note ring
-WHOLE_W         = 0.56          # whole note width
+WHOLE_W         = 0.528         # whole note width (matches stem offset)
 WHOLE_H         = 0.40
 WHOLE_LW        = 2.8           # thicker stroke so whole notes look full
 WHOLE_INNER_W   = 0.26          # inner ellipse to create the classic "double-ring" whole note look
@@ -151,11 +151,11 @@ def _draw_notehead(ax, x, y, kind="black", ink="#1a1a1a", bg="#ffffff"):
         )
         ax.add_patch(e_in)
     elif kind == "x_note":
-        # Draw a thick 'x' cross
-        hx = NOTE_W * 0.4
+        # Draw a thick 'x' cross extending exactly to the stem
+        hx = STEM_X_OFFSET
         hy = NOTE_H * 0.5
         # Background to hide the stem passing under the x
-        bg_circle = mpatches.Circle((x, y), NOTE_W * 0.4, facecolor=bg, edgecolor='none', zorder=7.5)
+        bg_circle = mpatches.Circle((x, y), STEM_X_OFFSET * 0.95, facecolor=bg, edgecolor='none', zorder=7.5)
         ax.add_patch(bg_circle)
         ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=3.0, zorder=8)
         ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=3.0, zorder=8)
@@ -368,7 +368,7 @@ class StaffCircuitDrawer:
 
         if stem and kind not in ("whole",):
             stem_top = y + STEM_LEN
-            stem_x = x + (0.28 if kind == "whole" else (0.23 if kind == "x_note" else STEM_X_OFFSET))
+            stem_x = x + STEM_X_OFFSET
             _draw_stem(ax, stem_x, y, stem_top, ink=ink)
             if flag:
                 _draw_flag(ax, stem_x, stem_top, ink=ink)
@@ -419,7 +419,7 @@ class StaffCircuitDrawer:
         for i, (q, y_note, kind) in enumerate(notes):
             x_note = x  # all chord notes share the same x-coordinate
 
-            stem_offset = 0.28 if kind == "whole" else (0.23 if kind == "x_note" else STEM_X_OFFSET)
+            stem_offset = STEM_X_OFFSET
             stem_x = x_note + stem_offset
             stem_xs.append(stem_x)
 
