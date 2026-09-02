@@ -44,7 +44,7 @@ def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
     
     for c, moment in enumerate(moments):
         for ev in moment:
-            if ev.kind == "barrier" or ev.kind == "measure":
+            if ev.kind in ("barrier", "measure", "repeat_start", "repeat_end", "bracket_start", "bracket_end"):
                 continue
                 
             # Find the y-offsets for this gate
