@@ -310,7 +310,7 @@ class StaffCircuitDrawer:
     def _sys_offset_y(self, sys_idx: int) -> float:
         # Each system takes up space for all qubits plus top/bottom padding
         pad_top = 2.4
-        pad_bot = 1.6
+        pad_bot = 1.6 if self.qc.num_clbits == 0 else 3.5
         height_per_qubit = (STAFF_HEIGHT + STAFF_GAP)
         sys_height = self.n_qubits * height_per_qubit + pad_top + pad_bot
         return -sys_idx * sys_height
@@ -530,6 +530,20 @@ class StaffCircuitDrawer:
                        ha="center", va=va)
 
     # ---------- staves ----------
+    def _draw_classical_crescendo(self, ax, sys_idx):
+        if self.qc.num_clbits == 0:
+            return
+        ink = self.style["ink"]
+        y_center = self._global_staff_bottom(sys_idx) - STAFF_GAP * 0.8
+        x_start = X_START
+        x_end = self.system_end_x[sys_idx]
+        delta = 0.5  # half-height of the opening
+        ax.plot([x_start, x_end], [y_center, y_center + delta], color=ink, lw=1.2, zorder=2)
+        ax.plot([x_start, x_end], [y_center, y_center - delta], color=ink, lw=1.2, zorder=2)
+        
+    def _crescendo_y_center(self, sys_idx):
+        return self._global_staff_bottom(sys_idx) - STAFF_GAP * 0.8
+
     def _draw_staff_lines(self, ax, qubit, sys_idx):
         top = self._staff_top_y(qubit, sys_idx)
         # Final barline exact position is system_end_x
@@ -664,6 +678,48 @@ class StaffCircuitDrawer:
 
         ink = self.style["ink"]
 
+        if ev.kind == "repeat_start":
+            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
+            ax.plot([x-0.2, x-0.2], [y_top, y_bot], color=ink, lw=3.0, zorder=8)
+            ax.plot([x+0.1, x+0.1], [y_top, y_bot], color=ink, lw=1.0, zorder=8)
+            for q in ev.targets:
+                y_c = self._y_of(q, sys_idx, 0.0)
+                ax.plot(x+0.4, y_c + 0.3, marker='o', markersize=3, color=ink, zorder=8)
+                ax.plot(x+0.4, y_c - 0.3, marker='o', markersize=3, color=ink, zorder=8)
+            return
+
+        if ev.kind == "repeat_end":
+            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
+            ax.plot([x+0.2, x+0.2], [y_top, y_bot], color=ink, lw=3.0, zorder=8)
+            ax.plot([x-0.1, x-0.1], [y_top, y_bot], color=ink, lw=1.0, zorder=8)
+            for q in ev.targets:
+                y_c = self._y_of(q, sys_idx, 0.0)
+                ax.plot(x-0.4, y_c + 0.3, marker='o', markersize=3, color=ink, zorder=8)
+                ax.plot(x-0.4, y_c - 0.3, marker='o', markersize=3, color=ink, zorder=8)
+            return
+
+        if ev.kind == "bracket_start":
+            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
+            # Draw [
+            ax.plot([x, x], [y_top + 0.2, y_bot - 0.2], color=ink, lw=2.0, zorder=8)
+            ax.plot([x, x+0.3], [y_top + 0.2, y_top + 0.2], color=ink, lw=2.0, zorder=8)
+            ax.plot([x, x+0.3], [y_bot - 0.2, y_bot - 0.2], color=ink, lw=2.0, zorder=8)
+            # Label
+            self._text(ax, x + 0.1, y_top + 0.4, ev.label, size=GATE_LABEL_SIZE, weight="bold", ha="left", va="bottom", color=ink)
+            return
+
+        if ev.kind == "bracket_end":
+            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
+            # Draw ]
+            ax.plot([x, x], [y_top + 0.2, y_bot - 0.2], color=ink, lw=2.0, zorder=8)
+            ax.plot([x, x-0.3], [y_top + 0.2, y_top + 0.2], color=ink, lw=2.0, zorder=8)
+            ax.plot([x, x-0.3], [y_bot - 0.2, y_bot - 0.2], color=ink, lw=2.0, zorder=8)
+            return
+
         if ev.kind == "barrier":
             return
 
@@ -672,6 +728,10 @@ class StaffCircuitDrawer:
             y = self._y_of(q, sys_idx, 0.0)
             # Shift measure symbols slightly to the right to sit closer to the barline
             _draw_measure_symbol(ax, x + DX * 0.4, y, ink=ink)
+            if self.qc.num_clbits > 0:
+                c_y = self._crescendo_y_center(sys_idx)
+                # Draw vertical line from measure symbol down to crescendo
+                ax.plot([x + DX * 0.4, x + DX * 0.4], [y - 0.5, c_y], color=ink, lw=1.0, zorder=1)
             return
 
         if ev.kind == "single":
@@ -769,6 +829,7 @@ class StaffCircuitDrawer:
             for q in range(n):
                 self._draw_staff_lines(ax, q, sys_idx)
                 self._draw_clef_and_label(ax, q, sys_idx)
+            self._draw_classical_crescendo(ax, sys_idx)
 
             draw_vertical_brace(ax, BRACE_X, y_top, y_bot,
                                 color=self.style["ink"])

@@ -43,6 +43,19 @@ _PARAM_GATES = {"rx", "ry", "rz", "p", "u", "u1", "u2", "u3", "crx", "cry", "crz
 
 def _fmt_one_param(p):
     """Format a single parameter, using π notation when possible."""
+    import sympy
+    from qiskit.circuit import ParameterExpression
+    if isinstance(p, ParameterExpression):
+        # Format ParameterExpression nicely using sympy
+        expr = p.sympify()
+        import numpy as np
+        expr = expr.subs(float(np.pi), sympy.pi)
+        expr = expr.subs(-float(np.pi), -sympy.pi)
+        expr = expr.subs(float(np.pi)/2, sympy.pi/2)
+        expr = expr.subs(-float(np.pi)/2, -sympy.pi/2)
+        expr = sympy.nsimplify(expr, rational=True)
+        return str(expr).replace('pi', 'π').replace('*', '')
+
     try:
         val = float(p)
     except (TypeError, ValueError):
@@ -93,30 +106,95 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
     list of GateEvent objects sharing that column.
     """
     n_qubits = qc.num_qubits
-    next_free_col = [0] * n_qubits          # next available column per qubit wire
-    events: List[GateEvent] = []
+    next_free_col = [0] * n_qubits
+    events = []
 
     from qiskit.converters import circuit_to_dag
-    dag = circuit_to_dag(qc)
-    
-    ordered_nodes = []
-    for layer in dag.layers():
-        nodes = list(layer['graph'].op_nodes())
-        def get_span(node):
-            q_idx = [qc.find_bit(q).index for q in node.qargs]
-            if not q_idx: return 0
-            return max(q_idx) - min(q_idx)
-        nodes.sort(key=get_span)
-        ordered_nodes.extend(nodes)
+    from qiskit.circuit.controlflow import ForLoopOp, WhileLoopOp
 
-    for node in ordered_nodes:
+    STANDARD_GATES = {'x', 'y', 'z', 'h', 's', 'sdg', 't', 'tdg', 'rx', 'ry', 'rz', 'rzz', 'cx', 'cy', 'cz', 'cp', 'swap', 'iswap', 'ccx', 'cswap', 'measure', 'barrier', 'delay', 'reset', 'p', 'u', 'u1', 'u2', 'u3', 'crx', 'cry', 'crz', 'cu'}
+
+    def get_ordered_items(circuit, q_map, c_map):
+        dag = circuit_to_dag(circuit)
+        for layer in dag.layers():
+            nodes = list(layer['graph'].op_nodes())
+            def get_span(node):
+                q_idx = [q_map[q] for q in node.qargs]
+                if not q_idx: return 0
+                return max(q_idx) - min(q_idx)
+            nodes.sort(key=get_span)
+            
+            for node in nodes:
+                op = node.op
+                name = op.name
+                
+                # Check for control flow
+                if isinstance(op, (ForLoopOp, WhileLoopOp)):
+                    body = op.blocks[0]
+                    inner_q_map = dict(zip(body.qubits, [q_map[q] for q in node.qargs]))
+                    inner_c_map = dict(zip(body.clbits, [c_map[c] for c in node.cargs])) if node.cargs else {}
+                    
+                    q_idx = [q_map[q] for q in node.qargs]
+                    yield {'type': 'marker', 'kind': 'repeat_start', 'q_idx': q_idx}
+                    yield from get_ordered_items(body, inner_q_map, inner_c_map)
+                    yield {'type': 'marker', 'kind': 'repeat_end', 'q_idx': q_idx}
+                    continue
+                    
+                # Check for sub-circuits
+                if name not in STANDARD_GATES and hasattr(op, 'definition') and op.definition is not None:
+                    try:
+                        body = op.definition
+                        inner_q_map = dict(zip(body.qubits, [q_map[q] for q in node.qargs]))
+                        inner_c_map = dict(zip(body.clbits, [c_map[c] for c in node.cargs])) if node.cargs else {}
+                        
+                        q_idx = [q_map[q] for q in node.qargs]
+                        yield {'type': 'marker', 'kind': 'bracket_start', 'q_idx': q_idx, 'label': name}
+                        yield from get_ordered_items(body, inner_q_map, inner_c_map)
+                        yield {'type': 'marker', 'kind': 'bracket_end', 'q_idx': q_idx, 'label': name}
+                        continue
+                    except Exception:
+                        pass
+                
+                q_idx = [q_map[q] for q in node.qargs]
+                c_idx = [c_map[c] for c in node.cargs] if node.cargs else []
+                yield {'type': 'node', 'node': node, 'q_idx': q_idx, 'c_idx': c_idx}
+
+    initial_q_map = {q: i for i, q in enumerate(qc.qubits)}
+    initial_c_map = {c: i for i, c in enumerate(qc.clbits)}
+    
+    items = list(get_ordered_items(qc, initial_q_map, initial_c_map))
+
+    for item in items:
+        if item['type'] == 'marker':
+            q_idx = item['q_idx']
+            if not q_idx: continue
+            span_qubits = range(min(q_idx), max(q_idx) + 1)
+            col = max((next_free_col[q] for q in span_qubits), default=0) + 1
+            ev = GateEvent(
+                name=item['kind'],
+                kind=item['kind'],
+                qubits=q_idx,
+                clbits=[],
+                controls=[],
+                targets=q_idx,
+                label=item.get('label', ''),
+                params="",
+                span=1,
+                column=col
+            )
+            events.append((col, ev))
+            for q in span_qubits:
+                next_free_col[q] = col + 2
+            continue
+            
+        node = item['node']
+        q_idx = item['q_idx']
+        c_idx = item['c_idx']
+        
         op = node.op
         name = op.name
         if name in ("delay",):
             continue
-
-        q_idx = [qc.find_bit(q).index for q in node.qargs]
-        c_idx = [qc.find_bit(c).index for c in node.cargs] if node.cargs else []
 
         if not q_idx:
             continue
