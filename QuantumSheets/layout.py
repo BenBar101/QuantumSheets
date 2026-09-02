@@ -98,7 +98,7 @@ def _pretty_label(name, params):
     return base
 
 
-def circuit_to_moments(qc) -> List[List[GateEvent]]:
+def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
     """
     Greedily packs qc.data into moments (columns), one gate per wire per
     column, mirroring how standard circuit diagrams (and qiskit's own
@@ -142,7 +142,7 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
                     continue
                     
                 # Check for sub-circuits
-                if name not in STANDARD_GATES and hasattr(op, 'definition') and op.definition is not None:
+                if unroll_subcircuits and name not in STANDARD_GATES and hasattr(op, 'definition') and op.definition is not None:
                     try:
                         body = op.definition
                         inner_q_map = dict(zip(body.qubits, [q_map[q] for q in node.qargs]))

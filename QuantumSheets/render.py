@@ -237,13 +237,13 @@ def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
 
 
 class StaffCircuitDrawer:
-    def __init__(self, qc, style="clean", max_cols_per_system=36, title=None, strip=False):
+    def __init__(self, qc, style="clean", max_cols_per_system=36, title=None, strip=False, unroll_subcircuits=True):
         self.qc = qc
         self.n_qubits = qc.num_qubits
         self.style = STYLES[style]
         self.title = title
         self.strip = strip
-        self.moments = circuit_to_moments(qc)
+        self.moments = circuit_to_moments(qc, unroll_subcircuits=unroll_subcircuits)
         self.n_cols = len(self.moments)
         self.max_cols_per_system_arg = max(1, max_cols_per_system)
         self.max_cols_per_system = max(1, self.n_cols) if strip else self.max_cols_per_system_arg
@@ -875,8 +875,8 @@ class StaffCircuitDrawer:
 
 
 def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=36,
-                 title=None, dpi=100, strip=False):
-    drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title, strip=strip)
+                 title=None, dpi=100, strip=False, unroll_subcircuits=True):
+    drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title, strip=strip, unroll_subcircuits=unroll_subcircuits)
     fig = drawer.draw(dpi=dpi)
     if filename:
         fig.savefig(filename, facecolor=fig.get_facecolor(), bbox_inches="tight")

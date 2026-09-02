@@ -55,8 +55,8 @@ def _unroll_moments(moments):
         return unrolled
     return unroll_segment(0, len(moments))
 
-def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
-    raw_moments = circuit_to_moments(qc)
+def generate_audio(qc, filename="circuit_audio.wav", bpm=120, unroll_subcircuits=True):
+    raw_moments = circuit_to_moments(qc, unroll_subcircuits=unroll_subcircuits)
     moments = _unroll_moments(raw_moments)
     
     sample_rate = 44100
