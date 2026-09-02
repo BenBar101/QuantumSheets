@@ -15,6 +15,11 @@ pip install QuantumSheets
 ## Features
 
 - **Universal Gate Support**: Completely supports ALL standard Qiskit gates natively, and flawlessly renders completely custom multi-qubit gates of any size.
+- **Advanced Circuit Features**: 
+  - **Control Flow**: Natively unrolls Qiskit loops (`ForLoopOp`, `WhileLoopOp`) and renders them using authentic musical repeat barlines (`|:` and `:|`).
+  - **Sub-circuits**: Automatically unpacks custom sub-circuits and brackets their internal notes into grouped phrases.
+  - **Parameter Expressions**: Uses SymPy to beautifully format mathematical parameters (e.g., `RX(θ/2 + π)`).
+  - **Classical Registers**: Displays classical bits as a crescendo (`<`) at the bottom of the system, with measurements dropping down to it.
 - **Musical Notation**: Renders single-qubit gates as notes and multi-qubit gates as polyphonic chords with proper stems and clefs.
 - **Audio Synthesis**: Generates `.wav` files playing the circuit's sequence. Pitches are mapped to gates, and multi-qubit gates generate beautiful harmonic intervals.
 - **MathText Rendering**: Supports LaTeX/MathText in custom gate labels (e.g., `$7^{1} \\% 15$`).
