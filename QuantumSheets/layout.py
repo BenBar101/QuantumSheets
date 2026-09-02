@@ -135,9 +135,10 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
                     inner_c_map = dict(zip(body.clbits, [c_map[c] for c in node.cargs])) if node.cargs else {}
                     
                     q_idx = [q_map[q] for q in node.qargs]
-                    yield {'type': 'marker', 'kind': 'repeat_start', 'q_idx': q_idx}
+                    iterations = len(op.params[0]) if isinstance(op, ForLoopOp) else 2
+                    yield {'type': 'marker', 'kind': 'repeat_start', 'q_idx': q_idx, 'label': str(iterations)}
                     yield from get_ordered_items(body, inner_q_map, inner_c_map)
-                    yield {'type': 'marker', 'kind': 'repeat_end', 'q_idx': q_idx}
+                    yield {'type': 'marker', 'kind': 'repeat_end', 'q_idx': q_idx, 'label': str(iterations)}
                     continue
                     
                 # Check for sub-circuits

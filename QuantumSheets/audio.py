@@ -19,8 +19,45 @@ PITCHES = {
      2.0: 698.46, # F5
 }
 
+def _unroll_moments(moments):
+    def unroll_segment(start_idx, end_idx):
+        unrolled = []
+        c = start_idx
+        while c < end_idx:
+            moment = moments[c]
+            repeat_start = next((ev for ev in moment if ev.kind == "repeat_start"), None)
+            if repeat_start:
+                try:
+                    iters = int(repeat_start.label)
+                except ValueError:
+                    iters = 2
+                    
+                # Find matching repeat_end
+                c_end = c + 1
+                depth = 1
+                while c_end < end_idx:
+                    end_moment = moments[c_end]
+                    if any(ev.kind == "repeat_start" and ev.qubits == repeat_start.qubits for ev in end_moment):
+                        depth += 1
+                    if any(ev.kind == "repeat_end" and ev.qubits == repeat_start.qubits for ev in end_moment):
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    c_end += 1
+                
+                body_unrolled = unroll_segment(c + 1, c_end)
+                for _ in range(iters):
+                    unrolled.extend(body_unrolled)
+                c = c_end + 1
+            else:
+                unrolled.append(moment)
+                c += 1
+        return unrolled
+    return unroll_segment(0, len(moments))
+
 def generate_audio(qc, filename="circuit_audio.wav", bpm=120):
-    moments = circuit_to_moments(qc)
+    raw_moments = circuit_to_moments(qc)
+    moments = _unroll_moments(raw_moments)
     
     sample_rate = 44100
     beat_duration = 60.0 / bpm
