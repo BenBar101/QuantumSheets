@@ -742,11 +742,18 @@ class StaffCircuitDrawer:
             _draw_measure_symbol(ax, x + DX * 0.4, y, ink=ink)
             if self.qc.num_clbits > 0:
                 c_y = self._crescendo_y_center(sys_idx)
-                # Draw vertical line from measure symbol down to crescendo
-                ax.plot([x + DX * 0.4, x + DX * 0.4], [y - 0.0625, c_y], color=ink, lw=1.0, zorder=1)
+                x_tip = x + DX * 0.4
+                
+                # Draw vertical line from measure symbol down to just above crescendo
+                ax.plot([x_tip, x_tip], [y - 0.0625, c_y + 0.15], color=ink, lw=1.0, zorder=1)
+                
+                # Draw arrowhead pointing down
+                ax.fill([x_tip - 0.1, x_tip + 0.1, x_tip], [c_y + 0.15, c_y + 0.15, c_y], color=ink, zorder=1)
+                
                 if ev.clbits:
                     cbit = ev.clbits[0]
-                    self._text(ax, x + DX * 0.4, c_y - 0.25, str(cbit), size=GATE_LABEL_SIZE*0.8, weight="bold", ha="center", va="top", color=ink)
+                    # Put number to the right of the arrowhead
+                    self._text(ax, x_tip + 0.15, c_y + 0.05, str(cbit), size=GATE_LABEL_SIZE*0.8, weight="bold", ha="left", va="center", color=ink)
             return
 
         if ev.kind == "single":
