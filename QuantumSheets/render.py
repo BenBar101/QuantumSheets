@@ -679,25 +679,37 @@ class StaffCircuitDrawer:
         ink = self.style["ink"]
 
         if ev.kind == "repeat_start":
-            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
-            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
-            ax.plot([x-0.2, x-0.2], [y_top, y_bot], color=ink, lw=3.0, zorder=8)
-            ax.plot([x+0.1, x+0.1], [y_top, y_bot], color=ink, lw=1.0, zorder=8)
+            y_top = self._y_of(min(ev.targets), sys_idx, 2.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -2.0)
+            
+            # Thick and thin barlines
+            ax.plot([x-0.1, x-0.1], [y_top, y_bot], color=ink, lw=4.5, zorder=8)
+            ax.plot([x+0.05, x+0.05], [y_top, y_bot], color=ink, lw=1.2, zorder=8)
+            
+            # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x+0.4, y_c + 0.3, marker='o', markersize=3, color=ink, zorder=8)
-                ax.plot(x+0.4, y_c - 0.3, marker='o', markersize=3, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c + 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c - 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
             return
 
         if ev.kind == "repeat_end":
-            y_top = self._y_of(min(ev.targets), sys_idx, 1.0)
-            y_bot = self._y_of(max(ev.targets), sys_idx, -1.0)
-            ax.plot([x+0.2, x+0.2], [y_top, y_bot], color=ink, lw=3.0, zorder=8)
-            ax.plot([x-0.1, x-0.1], [y_top, y_bot], color=ink, lw=1.0, zorder=8)
+            y_top = self._y_of(min(ev.targets), sys_idx, 2.0)
+            y_bot = self._y_of(max(ev.targets), sys_idx, -2.0)
+            
+            # Thin and thick barlines
+            ax.plot([x+0.1, x+0.1], [y_top, y_bot], color=ink, lw=4.5, zorder=8)
+            ax.plot([x-0.05, x-0.05], [y_top, y_bot], color=ink, lw=1.2, zorder=8)
+            
+            # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x-0.4, y_c + 0.3, marker='o', markersize=3, color=ink, zorder=8)
-                ax.plot(x-0.4, y_c - 0.3, marker='o', markersize=3, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c + 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c - 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
+                
+            # Text indicating iterations
+            label = ev.label if ev.label else "2"
+            self._text(ax, x + 0.1, y_top + 0.2, f"{label}x", size=GATE_LABEL_SIZE, weight="bold", ha="center", va="bottom", color=ink)
             return
 
         if ev.kind == "bracket_start":
