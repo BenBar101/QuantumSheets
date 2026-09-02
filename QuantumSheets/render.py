@@ -689,8 +689,8 @@ class StaffCircuitDrawer:
             # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x+0.25, y_c + 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
-                ax.plot(x+0.25, y_c - 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c + 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c - 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
             return
 
         if ev.kind == "repeat_end":
@@ -704,8 +704,8 @@ class StaffCircuitDrawer:
             # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x-0.25, y_c + 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
-                ax.plot(x-0.25, y_c - 0.125, marker='o', markersize=2.5, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c + 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c - 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
                 
             # Text indicating iterations
             label = ev.label if ev.label else "2"
