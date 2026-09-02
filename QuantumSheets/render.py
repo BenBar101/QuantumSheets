@@ -744,6 +744,9 @@ class StaffCircuitDrawer:
                 c_y = self._crescendo_y_center(sys_idx)
                 # Draw vertical line from measure symbol down to crescendo
                 ax.plot([x + DX * 0.4, x + DX * 0.4], [y - 0.0625, c_y], color=ink, lw=1.0, zorder=1)
+                if ev.clbits:
+                    cbit = ev.clbits[0]
+                    self._text(ax, x + DX * 0.4, c_y - 0.25, str(cbit), size=GATE_LABEL_SIZE*0.8, weight="bold", ha="center", va="top", color=ink)
             return
 
         if ev.kind == "single":
