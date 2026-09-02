@@ -299,14 +299,13 @@ class StaffCircuitDrawer:
                     x += DX
             
             # The final barline is drawn further to the right to avoid overlapping gate labels
-            end_x = (xs[-1] if xs else X_START) + DX * 1.2
+            end_x = (xs[-1] if xs else X_START) + DX * 2.5
             self.system_xs.append(xs)
             self.system_end_x.append(end_x)
 
-        # Remove artificial page width forcing. 
-        # Each system will just extend exactly as far as its last gate.
-        # But for the bounding box of the whole image, we track max_width.
-        pass
+        if len(self.systems) > 1:
+            max_end_x = max(self.system_end_x)
+            self.system_end_x = [max_end_x] * len(self.systems)
 
     def _sys_offset_y(self, sys_idx: int) -> float:
         # Each system takes up space for all qubits plus top/bottom padding
@@ -431,29 +430,10 @@ class StaffCircuitDrawer:
             self._draw_label_next_to_note(ax, x, y, gate_label)
 
     def _draw_label_next_to_note(self, ax, x, y, label_text):
-        visual_label = label_text.replace("$", "").replace("^{\\,\\dagger}", "dg").replace("\\,", "")
-        
-        # If the gate name is long, put it under the note
-        if len(visual_label) > 3 or "(" in label_text:
-            if "(" in label_text:
-                base, params = label_text.split("(", 1)
-                params = "(" + params
-                self._text(ax, x, y - LINE_SPACING * 1.6, base,
-                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                           ha="center", va="top")
-                self._text(ax, x, y - LINE_SPACING * 2.5, params,
-                           size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
-                           ha="center", va="top")
-            else:
-                self._text(ax, x, y - LINE_SPACING * 1.6, label_text,
-                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                           ha="center", va="top")
-        else:
-            label_x = x + NOTE_W * 0.8
-            self._text(ax, label_x, y, label_text,
-                       size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                       ha="left", va="center")
-
+        label_x = x + NOTE_W * 0.6
+        self._text(ax, label_x, y, label_text,
+                   size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                   ha="left", va="center")
     def _chord(self, ax, x, qubits, sys_idx, kinds=None, offsets=None, label=None, note_labels=None):
         """
         Draw a group of notes on the same vertical line (a chord) connected by a single stem.
@@ -543,34 +523,11 @@ class StaffCircuitDrawer:
         # Gate label exactly on top (or bottom) of the center of the beam
         if label:
             cx = (min(stem_xs) + max(stem_xs)) / 2.0
-            
             y_offset = 0.1 if stem_dir == 1 else -0.1
             va = "bottom" if stem_dir == 1 else "top"
-            
-            if "(" in label:
-                base, params = label.split("(", 1)
-                params = "(" + params
-                
-                if stem_dir == 1:
-                    # Stems up: text goes on top of beam
-                    self._text(ax, cx, stem_y_end + y_offset, base,
-                               size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                               ha="center", va=va)
-                    self._text(ax, cx, stem_y_end + y_offset + LINE_SPACING * 0.8, params,
-                               size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
-                               ha="center", va=va)
-                else:
-                    # Stems down: text goes below beam
-                    self._text(ax, cx, stem_y_end + y_offset - LINE_SPACING * 0.8, base,
-                               size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                               ha="center", va=va)
-                    self._text(ax, cx, stem_y_end + y_offset, params,
-                               size=GATE_LABEL_SIZE * 0.75, weight="normal", style="italic",
-                               ha="center", va=va)
-            else:
-                self._text(ax, cx, stem_y_end + y_offset, label,
-                           size=GATE_LABEL_SIZE, weight="bold", style="italic",
-                           ha="center", va=va)
+            self._text(ax, cx, stem_y_end + y_offset, label,
+                       size=GATE_LABEL_SIZE, weight="bold", style="italic",
+                       ha="center", va=va)
 
     # ---------- staves ----------
     def _draw_staff_lines(self, ax, qubit, sys_idx):
@@ -630,7 +587,22 @@ class StaffCircuitDrawer:
         ax.add_patch(patch_q)
 
         # Qubit number in the bottom two spaces
-        path_n = TextPath((0, 0), str(qubit), size=1, prop={'family': 'serif', 'weight': 'bold'})
+        digits = str(qubit)
+        if len(digits) == 1:
+            path_n = TextPath((0, 0), digits, size=1, prop={'family': 'serif', 'weight': 'bold'})
+        else:
+            from matplotlib.path import Path
+            import numpy as np
+            all_verts = []
+            all_codes = []
+            x_offset = 0
+            for char in digits:
+                p = TextPath((x_offset, 0), char, size=1, prop={'family': 'serif', 'weight': 'bold'})
+                all_verts.append(p.vertices)
+                all_codes.append(p.codes)
+                x_offset += p.get_extents().width * 0.75
+            path_n = Path(np.concatenate(all_verts), np.concatenate(all_codes))
+            
         bbox_n = path_n.get_extents()
 
         scale_n = (2.0 * LINE_SPACING) / bbox_n.height

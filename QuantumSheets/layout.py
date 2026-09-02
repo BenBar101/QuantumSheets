@@ -95,17 +95,28 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
     n_qubits = qc.num_qubits
     next_free_col = [0] * n_qubits          # next available column per qubit wire
     events: List[GateEvent] = []
-    multi_col_spans = {}
 
-    for instr in qc.data:
-        op = instr.operation
+    from qiskit.converters import circuit_to_dag
+    dag = circuit_to_dag(qc)
+    
+    ordered_nodes = []
+    for layer in dag.layers():
+        nodes = list(layer['graph'].op_nodes())
+        def get_span(node):
+            q_idx = [qc.find_bit(q).index for q in node.qargs]
+            if not q_idx: return 0
+            return max(q_idx) - min(q_idx)
+        nodes.sort(key=get_span)
+        ordered_nodes.extend(nodes)
+
+    for node in ordered_nodes:
+        op = node.op
         name = op.name
         if name in ("delay",):
-            # timing-only instruction, irrelevant to the diagram
             continue
 
-        q_idx = [qc.find_bit(q).index for q in instr.qubits]
-        c_idx = [qc.find_bit(c).index for c in instr.clbits] if instr.clbits else []
+        q_idx = [qc.find_bit(q).index for q in node.qargs]
+        c_idx = [qc.find_bit(c).index for c in node.cargs] if node.cargs else []
 
         if not q_idx:
             continue
@@ -149,6 +160,9 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         if hasattr(op, "params") and op.params and kind not in ("measure", "barrier"):
             params_str = _fmt_params(op.params)
             
+        if params_str:
+            ev_label = f"{ev_label}({params_str})"
+            
         # Determine gate padding (how many extra columns it needs on each side)
         import re
         visual_label = re.sub(r'\\[a-zA-Z]+', '', ev_label) # remove \ commands like \dagger, \pi, \pm
@@ -161,29 +175,13 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         pad = 0
         if total_len > 3:
             pad = (total_len - 1) // 5
+
+
+
+        span_qubits = range(min(q_idx), max(q_idx) + 1) if is_multi else q_idx
             
         # Push the gate forward so it has empty space before it
-        col = max(next_free_col[q] for q in q_idx) + pad
-            
-        if is_multi:
-            min_q, max_q = min(q_idx), max(q_idx)
-            # Find a column where this gate (including padding) doesn't vertically overlap
-            while True:
-                overlap = False
-                for c_offset in range(-pad, pad + 1):
-                    spans = multi_col_spans.get(col + c_offset, [])
-                    for (sq_min, sq_max) in spans:
-                        if not (max_q < sq_min or min_q > sq_max):
-                            overlap = True
-                            break
-                    if overlap:
-                        break
-                if overlap:
-                    col += 1
-                else:
-                    for c_offset in range(-pad, pad + 1):
-                        multi_col_spans.setdefault(col + c_offset, []).append((min_q, max_q))
-                    break
+        col = max(next_free_col[q] for q in span_qubits) + pad
 
         ev = GateEvent(
             name=name,
@@ -199,7 +197,7 @@ def circuit_to_moments(qc) -> List[List[GateEvent]]:
         )
         events.append((col, ev))
 
-        for q in q_idx:
+        for q in span_qubits:
             next_free_col[q] = col + pad + 1
 
     # Group by column
