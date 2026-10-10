@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantumSheets — Interactive Audio & Sheet Music Player</title>
+  <meta name="description" content="Listen to and explore Qiskit quantum circuits rendered as classical sheet music with acoustic piano DSP.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎼</text></svg>">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --border: #e2e8f0;
+      --accent: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem 4rem 1rem;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .tagline {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 650px;
+      margin: 0 auto 1.5rem auto;
+    }
+
+    .badges {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      background-color: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--accent);
+    }
+
+    .badge:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      margin-bottom: 2.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      scroll-margin-top: 2rem;
+    }
+
+    .card-header {
+      margin-bottom: 1.25rem;
+    }
+
+    .card-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.4rem;
+    }
+
+    .card-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .score-view {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    .score-view.ink-style {
+      background: #faf6ee;
+    }
+
+    .score-view img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 6px;
+    }
+
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      background: #f1f5f9;
+      padding: 0.85rem 1.25rem;
+      border-radius: 12px;
+    }
+
+    .player-row audio {
+      flex: 1;
+      min-width: 240px;
+      height: 40px;
+      outline: none;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      padding: 0.45rem 0.85rem;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .download-btn:hover {
+      background: var(--text);
+      color: #ffffff;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 4rem;
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>🎼 QuantumSheets</h1>
+      <p class="tagline">Musical staff notation and pure acoustic piano audio synthesis for Qiskit quantum circuits.</p>
+      <div class="badges">
+        <a class="badge" href="https://github.com/BenBar101/QuantumSheets" target="_blank">
+          <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub Repository
+        </a>
+        <a class="badge" href="https://pypi.org/project/QuantumSheets/" target="_blank">
+          📦 PyPI Package
+        </a>
+      </div>
+    </header>
+
+    <!-- Hello World -->
+    <section class="card" id="hello-world">
+      <div class="card-header">
+        <h2 class="card-title">1. Qiskit Hello World (Bell State)</h2>
+        <p class="card-desc">Two-qubit Bell-state circuit: Hadamard superposition gate on q0 followed by a CNOT gate entangling (q0, q1).</p>
+      </div>
+      <div class="score-view">
+        <img src="hello_world_score.png" alt="Qiskit Hello World Sheet Music Score">
+      </div>
+      <div class="player-row">
+        <audio controls preload="metadata">
+          <source src="hello_world_score.wav" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+        <a class="download-btn" href="hello_world_score.wav" download>
+          💾 Download WAV
+        </a>
+      </div>
+    </section>
+
+    <!-- Multi-qubit circuit -->
+    <section class="card" id="multi-qubit">
+      <div class="card-header">
+        <h2 class="card-title">2. Multi-Qubit Chords, Classical Registers & Parameters</h2>
+        <p class="card-desc">4-qubit circuit showing GHZ state prep, rotation parameter expressions, SWAP, Toffoli (CCX), CZ, and classical crescendo register measurements.</p>
+      </div>
+      <div class="score-view">
+        <img src="my_circuit_score.png" alt="Multi-qubit gates and classical register score">
+      </div>
+      <div class="player-row">
+        <audio controls preload="metadata">
+          <source src="my_circuit_score.wav" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+        <a class="download-btn" href="my_circuit_score.wav" download>
+          💾 Download WAV
+        </a>
+      </div>
+    </section>
+
+    <!-- Control Flow -->
+    <section class="card" id="control-flow">
+      <div class="card-header">
+        <h2 class="card-title">3. Control Flow Loops & Repeat Barlines</h2>
+        <p class="card-desc">Unrolled Qiskit ForLoopOp rendered with authentic musical repeat barlines (|: and :|) playing both loop iterations sequentially.</p>
+      </div>
+      <div class="score-view">
+        <img src="loop_score.png" alt="Quantum loops rendered with repeat barlines">
+      </div>
+      <div class="player-row">
+        <audio controls preload="metadata">
+          <source src="loop_score.wav" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+        <a class="download-btn" href="loop_score.wav" download>
+          💾 Download WAV
+        </a>
+      </div>
+    </section>
+
+    <!-- Shor's Algorithm -->
+    <section class="card" id="shor">
+      <div class="card-header">
+        <h2 class="card-title">4. Shor's Algorithm (8 Qubits, Vintage Ink Style)</h2>
+        <p class="card-desc">8-qubit implementation featuring 5-qubit mathematical modulo control operations, inverse QFT, rendered in parchment ink style.</p>
+      </div>
+      <div class="score-view ink-style">
+        <img src="test_shor_output.png" alt="Shor's Algorithm sheet music">
+      </div>
+      <div class="player-row">
+        <audio controls preload="metadata">
+          <source src="test_shor_output.wav" type="audio/wav">
+          Your browser does not support the audio element.
+        </audio>
+        <a class="download-btn" href="test_shor_output.wav" download>
+          💾 Download WAV
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      <p>Rendered with <a href="https://github.com/BenBar101/QuantumSheets">QuantumSheets</a> · Acoustic piano DSP powered by NumPy.</p>
+    </footer>
+  </div>
+
+  <script>
+    // Ensure only one audio element plays at a time
+    document.addEventListener('play', function(e) {
+      const audios = document.getElementsByTagName('audio');
+      for (let i = 0; i < audios.length; i++) {
+        if (audios[i] !== e.target) {
+          audios[i].pause();
+        }
+      }
+    }, true);
+  </script>
+</body>
+</html>

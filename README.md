@@ -1,8 +1,11 @@
 # QuantumSheets
 
 [![PyPI](https://img.shields.io/pypi/v/QuantumSheets.svg)](https://pypi.org/project/QuantumSheets/)
+[![Interactive Player](https://img.shields.io/badge/Interactive_Player-Listen_Online-blue?style=flat)](https://benbar101.github.io/QuantumSheets/)
 
 QuantumSheets is a Python library that renders Qiskit quantum circuits as classical sheet music. It maps quantum gates to musical notes on a staff, providing an alternative visual representation for quantum algorithms.
+
+> 🎧 **Web Audio Player**: You can listen to and explore all synthesized circuit scores directly in your browser without downloading files at the [QuantumSheets Interactive Web Player](https://benbar101.github.io/QuantumSheets/).
 
 ## Example: Qiskit Hello World
 
@@ -10,7 +13,7 @@ The two-qubit Bell-state circuit from the [Qiskit quickstart](https://quantum.cl
 
 ![Qiskit Hello World as classical sheet music on white](docs/hello_world_score.png)
 
-[Listen to or download the WAV](docs/hello_world_score.wav).
+[▶️ Play in Web Player](https://benbar101.github.io/QuantumSheets/#hello-world) · [Download WAV](docs/hello_world_score.wav)
 
 ## Installation
 
@@ -30,7 +33,7 @@ pip install QuantumSheets
 
 ![Multi-qubit gates, classical registers, and parameter expressions](docs/my_circuit_score.png)
 
-[Listen to the WAV](docs/my_circuit_score.wav)
+[▶️ Play in Web Player](https://benbar101.github.io/QuantumSheets/#multi-qubit) · [Download WAV](docs/my_circuit_score.wav)
 
 ### 2. Control Flow (Loops & Repeat Barlines)
 
@@ -38,7 +41,7 @@ pip install QuantumSheets
 
 ![Quantum loops rendered with repeat barlines](docs/loop_score.png)
 
-[Listen to the WAV](docs/loop_score.wav)
+[▶️ Play in Web Player](https://benbar101.github.io/QuantumSheets/#control-flow) · [Download WAV](docs/loop_score.wav)
 
 ### 3. MathText Labels & Custom Sub-circuits
 
@@ -48,12 +51,13 @@ pip install QuantumSheets
 
 ![Shor's Algorithm with MathText labels and subcircuits](docs/test_shor_output.png)
 
-[Listen to the WAV](docs/test_shor_output.wav)
+[▶️ Play in Web Player](https://benbar101.github.io/QuantumSheets/#shor) · [Download WAV](docs/test_shor_output.wav)
 
 ### 4. Audio Synthesis
 
 - **Acoustic Piano DSP (`.wav`)**: Generates 16-bit PCM WAV audio using an acoustic piano synthesis model with hammer strike transients, string inharmonicity, 3-string unison chorus detuning, phase dispersion, and soundboard comb reflections.
 - **Musical Note Timing**: Target gates ring out as full whole notes while control gates trigger crisp, shorter taps.
+- **In-Browser Playback**: Preview all scores online with native audio controls via [GitHub Pages](https://benbar101.github.io/QuantumSheets/).
 
 ## Quickstart
 
