@@ -252,7 +252,7 @@ def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
         # A column (DX=1.6) fits about 4-5 characters. 
         # pad=1 adds a column on BOTH sides (total 3 columns, ~14 chars)
         pad = 0
-        if total_len > 3:
+        if total_len > 3 and kind not in ("barrier", "measure"):
             pad = (total_len - 1) // 5
 
 

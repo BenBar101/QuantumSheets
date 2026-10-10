@@ -18,8 +18,5 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 
-[project.scripts]
-quantumsheets = "QuantumSheets.cli:main"
-
 [tool.setuptools.package-data]
 QuantumSheets = ["*.png", "*.otf"]

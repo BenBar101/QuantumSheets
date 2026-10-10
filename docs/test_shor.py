@@ -59,3 +59,13 @@ qc.append(qft_dagger(n_count), range(n_count))
 
 # Measure
 qc.measure(range(n_count), range(n_count))
+
+if __name__ == "__main__":
+    from pathlib import Path
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from QuantumSheets import draw_circuit, generate_audio
+
+    out_dir = Path(__file__).resolve().parent
+    draw_circuit(qc, filename=out_dir / "test_shor_output.png", style="ink", strip=False, dpi=160, unroll_subcircuits=False)
+    generate_audio(qc, filename=out_dir / "test_shor_output.wav", bpm=120, unroll_subcircuits=False)

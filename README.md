@@ -4,6 +4,14 @@
 
 QuantumSheets is a Python library that renders Qiskit quantum circuits as classical sheet music. It maps quantum gates to musical notes on a staff, providing an alternative visual representation for quantum algorithms.
 
+## Example: Qiskit Hello World
+
+The two-qubit Bell-state circuit from the [Qiskit quickstart](https://quantum.cloud.ibm.com/docs/en/guides/quick-start), rendered as classical sheet music on a white background. A Hadamard gate puts the first qubit in superposition, and a CNOT gate entangles the pair before measurement.
+
+![Qiskit Hello World as classical sheet music on white](docs/hello_world_score.png)
+
+[Listen to or download the WAV](docs/hello_world_score.wav).
+
 ## Installation
 
 You can install QuantumSheets directly from [PyPI](https://pypi.org/project/QuantumSheets/):
@@ -14,49 +22,64 @@ pip install QuantumSheets
 
 ## Features
 
-- **Universal Gate Support**: Completely supports ALL standard Qiskit gates natively, and flawlessly renders completely custom multi-qubit gates of any size.
-- **Advanced Circuit Features**: 
-  - **Control Flow**: Natively unrolls Qiskit loops (`ForLoopOp`, `WhileLoopOp`) and renders them using authentic musical repeat barlines (`|:` and `:|`).
-  - **Sub-circuits**: Automatically unpacks custom sub-circuits and brackets their internal notes into grouped phrases.
-  - **Parameter Expressions**: Uses SymPy to beautifully format mathematical parameters (e.g., `RX(θ/2 + π)`).
-  - **Classical Registers**: Displays classical bits as a crescendo (`<`) at the bottom of the system, with measurements dropping down to it.
-- **Musical Notation**: Renders single-qubit gates as notes and multi-qubit gates as polyphonic chords with proper stems and clefs.
-- **Audio Synthesis**: Generates `.wav` files playing the circuit's sequence. Pitches are mapped to gates, and multi-qubit gates generate beautiful harmonic intervals.
+### 1. Classical Registers, Chords & Parameter Expressions
+
+- **Classical Registers**: Displays classical bits as a crescendo (`<`) across the bottom of the system, with individual qubit measurement drop lines and bit indicators (`▾0`, `▾1`, `▾2`, `▾3`).
+- **Musical Notation**: Single-qubit gates render as notes and multi-qubit gates (CNOT, Toffoli, CZ, SWAP) render as polyphonic chords with authentic stems and clefs.
+- **Parameter Expressions**: Uses SymPy to format mathematical parameters into musical notation (e.g., `RX(π/2)`, `RY(π/4)`, `RZ(π)`).
+
+![Multi-qubit gates, classical registers, and parameter expressions](docs/my_circuit_score.png)
+
+[Listen to the WAV](docs/my_circuit_score.wav)
+
+### 2. Control Flow (Loops & Repeat Barlines)
+
+- **Control Flow**: Natively unrolls Qiskit loops (`ForLoopOp`, `WhileLoopOp`) and renders them using authentic musical repeat barlines (`|:` and `:|`) with repeat counts (`2x`), playing each iteration in sequence.
+
+![Quantum loops rendered with repeat barlines](docs/loop_score.png)
+
+[Listen to the WAV](docs/loop_score.wav)
+
+### 3. MathText Labels & Custom Sub-circuits
+
 - **MathText Rendering**: Supports LaTeX/MathText in custom gate labels (e.g., `$7^{1} \\% 15$`).
-- **Dynamic Layout**: Automatically wraps long circuits across multiple systems and gracefully adjusts horizontal spacing for massive labels to prevent overlap.
+- **Sub-circuits**: Unpacks custom sub-circuits (such as `QFT†`) and brackets their internal notes into grouped phrases.
+- **Visual Styles**: Choose between clean modern white (`style="clean"`) and vintage parchment (`style="ink"`).
 
-## Example: Shor's Algorithm
+![Shor's Algorithm with MathText labels and subcircuits](docs/test_shor_output.png)
 
-An 8-qubit implementation of Shor's Algorithm containing custom, 5-qubit mathematical control operations:
+[Listen to the WAV](docs/test_shor_output.wav)
 
-![Shor's Algorithm](docs/test_shor_output.png?v=4)
+### 4. Audio Synthesis
+
+- **Acoustic Piano DSP (`.wav`)**: Generates 16-bit PCM WAV audio using an acoustic piano synthesis model with hammer strike transients, string inharmonicity, 3-string unison chorus detuning, phase dispersion, and soundboard comb reflections.
+- **Musical Note Timing**: Target gates ring out as full whole notes while control gates trigger crisp, shorter taps.
 
 ## Quickstart
 
 ```python
 from qiskit import QuantumCircuit
-from QuantumSheets import draw_circuit
-from QuantumSheets.audio import generate_audio
+from QuantumSheets import draw_circuit, generate_audio
 
-qc = QuantumCircuit(3)
+qc = QuantumCircuit(2)
 qc.h(0)
 qc.cx(0, 1)
-qc.cx(1, 2)
 qc.measure_all()
 
-# Render circuit to image (supports "ink" and "clean" styles)
-draw_circuit(qc, filename="circuit.png", style="clean", strip=True)
+# Render classical notes on a white background
+draw_circuit(qc, filename="hello_world_score.png", style="clean", strip=True)
 
-# Synthesize the circuit's audio to a WAV file
-generate_audio(qc, filename="circuit.wav", bpm=120)
+# Synthesize the circuit's audio to WAV (acoustic grand piano)
+generate_audio(qc, filename="hello_world_score.wav", bpm=120)
 ```
 
-### CLI Usage
-
-You can generate both images and audio directly from the command line:
+To regenerate the example scores and WAVs from the repository root:
 
 ```bash
-python -m QuantumSheets.cli my_circuit.py -o output.png --style clean --audio
+python docs/hello_world.py
+python docs/loop_circuit.py
+python docs/my_circuit.py
+python docs/test_shor.py
 ```
 
 ## License

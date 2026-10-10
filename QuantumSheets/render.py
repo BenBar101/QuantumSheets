@@ -274,10 +274,9 @@ class StaffCircuitDrawer:
                 if all(ev.kind == "barrier" for ev in moment):
                     self._empty_barrier_cols.add(col_idx)
                     # Make barrier invisible if immediately followed by only measurements
-                    if col_idx + 1 < len(self.moments):
-                        next_m = self.moments[col_idx + 1]
-                        if next_m and all(ev.kind == "measure" for ev in next_m):
-                            self._invisible_barrier_cols.add(col_idx)
+                    next_non_empty = next((m for m in self.moments[col_idx + 1:] if m), None)
+                    if next_non_empty and all(ev.kind == "measure" for ev in next_non_empty):
+                        self._invisible_barrier_cols.add(col_idx)
 
         self._compute_system_xs()
         self.clef_img = mpimg.imread(_CLEF_PATH)
@@ -292,14 +291,20 @@ class StaffCircuitDrawer:
             x = X_START
             for i, moment in enumerate(sys_moments):
                 global_c = sys_idx * self.max_cols_per_system + i
-                if i > 0 and global_c in self._barrier_cols:
+                if i > 0 and global_c in self._barrier_cols and global_c not in self._invisible_barrier_cols:
                     x += BARRIER_GAP
                 xs.append(x)
                 if global_c not in self._empty_barrier_cols:
                     x += DX
             
-            # The final barline is drawn further to the right to avoid overlapping gate labels
-            end_x = (xs[-1] if xs else X_START) + DX * 2.5
+            # The final barline spacing: compact when no measurements, extra room when measurements fan out
+            has_meas = any(ev.kind == "measure" for ev in sys_moments[-1]) if sys_moments else False
+            if has_meas:
+                meas_count = sum(1 for ev in sys_moments[-1] if ev.kind == "measure")
+                extra_dx = 1.3 + 0.45 * max(0, meas_count - 1)
+            else:
+                extra_dx = 1.1
+            end_x = (xs[-1] if xs else X_START) + DX * extra_dx
             self.system_xs.append(xs)
             self.system_end_x.append(end_x)
 
@@ -535,7 +540,7 @@ class StaffCircuitDrawer:
             return
         ink = self.style["ink"]
         y_center = self._global_staff_bottom(sys_idx) - STAFF_GAP * 0.8
-        x_start = X_START
+        x_start = LEFT_BAR_X
         x_end = self.system_end_x[sys_idx]
         delta = 0.5  # half-height of the opening
         ax.plot([x_start, x_end], [y_center, y_center + delta], color=ink, lw=1.2, zorder=2)
@@ -738,11 +743,20 @@ class StaffCircuitDrawer:
         if ev.kind == "measure":
             q = ev.targets[0]
             y = self._y_of(q, sys_idx, 0.0)
-            # Shift measure symbols slightly to the right to sit closer to the barline
-            _draw_measure_symbol(ax, x + DX * 0.4, y, ink=ink)
+
+            moment = self.systems[sys_idx][local_i]
+            meas_events = [e for e in moment if e.kind == "measure"]
+            offset = 0.0
+            if len(meas_events) > 1:
+                meas_events_sorted = sorted(meas_events, key=lambda e: e.targets[0])
+                idx = meas_events_sorted.index(ev)
+                offset = idx * 0.55
+
+            x_meas = x + DX * 0.35 + offset
+            _draw_measure_symbol(ax, x_meas, y, ink=ink)
             if self.qc.num_clbits > 0:
                 c_y = self._crescendo_y_center(sys_idx)
-                x_tip = x + DX * 0.4
+                x_tip = x_meas
                 
                 # Draw vertical line from measure symbol down to just above crescendo
                 ax.plot([x_tip, x_tip], [y - 0.0625, c_y + 0.15], color=ink, lw=1.0, zorder=1)
@@ -753,7 +767,7 @@ class StaffCircuitDrawer:
                 if ev.clbits:
                     cbit = ev.clbits[0]
                     # Put number to the right of the arrowhead
-                    self._text(ax, x_tip + 0.15, c_y + 0.05, str(cbit), size=GATE_LABEL_SIZE*0.8, weight="bold", ha="left", va="center", color=ink)
+                    self._text(ax, x_tip + 0.14, c_y + 0.05, str(cbit), size=GATE_LABEL_SIZE*0.7, weight="bold", ha="left", va="center", color=ink)
             return
 
         if ev.kind == "single":
@@ -832,8 +846,9 @@ class StaffCircuitDrawer:
         y_top_global = self._global_staff_top(0)
         y_bot_global = self._global_staff_bottom(len(self.systems) - 1)
         
-        pad_top = 4.5
-        pad_bot = 1.5
+        has_crescendo = self.qc.num_clbits > 0
+        pad_bot = 2.0 if has_crescendo else 0.7
+        pad_top = 2.8 if self.title else 1.3
         height = (y_top_global + pad_top) - (y_bot_global - pad_bot)
 
         if figsize is None:
