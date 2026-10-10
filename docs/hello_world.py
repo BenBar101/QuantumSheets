@@ -16,7 +16,6 @@ from QuantumSheets.audio import generate_audio
 qc = QuantumCircuit(2)
 qc.h(0)
 qc.cx(0, 1)
-qc.measure_all()
 
 if __name__ == "__main__":
     output_dir = Path(__file__).resolve().parent

@@ -6,7 +6,7 @@ QuantumSheets is a Python library that renders Qiskit quantum circuits as classi
 
 ## Example: Qiskit Hello World
 
-The two-qubit Bell-state circuit from the [Qiskit quickstart](https://quantum.cloud.ibm.com/docs/en/guides/quick-start), rendered as classical sheet music on a white background. A Hadamard gate puts the first qubit in superposition, and a CNOT gate entangles the pair before measurement.
+The two-qubit Bell-state circuit from the [Qiskit quickstart](https://quantum.cloud.ibm.com/docs/en/guides/quick-start), rendered as classical sheet music on a white background. A Hadamard gate puts the first qubit in superposition, and a CNOT gate entangles the pair.
 
 ![Qiskit Hello World as classical sheet music on white](docs/hello_world_score.png)
 
@@ -64,7 +64,6 @@ from QuantumSheets import draw_circuit, generate_audio
 qc = QuantumCircuit(2)
 qc.h(0)
 qc.cx(0, 1)
-qc.measure_all()
 
 # Render classical notes on a white background
 draw_circuit(qc, filename="hello_world_score.png", style="clean", strip=True)
