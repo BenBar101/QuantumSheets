@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "QuantumSheets"
-version = "0.1.22"
+dynamic = ["version"]
 description = "Displaying quantum circuits with classical notes"
 authors = [
     { name = "Ben Bar" }
@@ -13,10 +13,14 @@ dependencies = [
     "qiskit",
     "matplotlib",
     "numpy",
+    "sympy",
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "MIT"
 
+[tool.setuptools.dynamic]
+version = {attr = "QuantumSheets.__version__"}
+
 [tool.setuptools.package-data]
-QuantumSheets = ["*.png", "*.otf"]
+QuantumSheets = ["*.png", "*.otf", "py.typed"]

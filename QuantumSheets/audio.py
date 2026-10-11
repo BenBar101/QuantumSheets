@@ -1,9 +1,15 @@
+import logging
 import numpy as np
 import wave
 import math
 
 from .layout import circuit_to_moments
-from .render import _SOLFEGE
+from .mapping import _SOLFEGE
+
+_log = logging.getLogger(__name__)
+
+# Cache for synthesised piano notes keyed by (freq, duration, sample_rate)
+_NOTE_CACHE: dict = {}
 
 # Frequencies for the treble clef staff (E4 to F5)
 # Y offsets from mid_y (-2.0 to +2.0) map to these pitches:
@@ -137,6 +143,10 @@ def _synthesize_piano_note(freq, duration, sample_rate=44100):
     - Pure NumPy soundboard acoustic comb reflections
     - Smooth damper release
     """
+    cache_key = (round(freq, 2), round(duration, 4), sample_rate)
+    if cache_key in _NOTE_CACHE:
+        return _NOTE_CACHE[cache_key].copy()
+
     n_samples = int(duration * sample_rate)
     if n_samples <= 0:
         return np.zeros(0, dtype=np.float32)
@@ -183,7 +193,9 @@ def _synthesize_piano_note(freq, duration, sample_rate=44100):
         thump = 0.18 * np.sin(2 * np.pi * (freq * 0.5) * t_thump) * np.exp(-t_thump / 0.006)
         wave[:thump_samples] += thump
 
-    # 4. Soundboard body reflections (vectorized comb filter in pure NumPy)
+    # 4. Soundboard body resonance (feedback comb filter — the in-place
+    #    accumulation deliberately creates IIR-style ringing that mimics
+    #    sympathetic string and soundboard resonance)
     delays = [int(0.029 * sample_rate), int(0.037 * sample_rate)]
     gains = [0.22, 0.18]
     for d, g in zip(delays, gains):
@@ -200,14 +212,31 @@ def _synthesize_piano_note(freq, duration, sample_rate=44100):
         rel_curve = np.linspace(1.0, 0.0, rel_samples) ** 2
         wave[-rel_samples:] *= rel_curve
 
-    return wave
+    _NOTE_CACHE[cache_key] = wave
+    return wave.copy()
 
-def generate_audio(qc, filename="circuit_audio.wav", bpm=120, unroll_subcircuits=True):
-    """
-    Synthesize audio for a quantum circuit to a 16-bit PCM .wav file.
+def generate_audio(qc, filename: str = "circuit_audio.wav", bpm: int = 120, unroll_subcircuits: bool = True, moments=None) -> None:
+    """Synthesize audio for a quantum circuit to a 16-bit PCM .wav file.
     Note durations accurately match visual note types (control notes are shorter than target notes).
+
+    Parameters
+    ----------
+    qc : QuantumCircuit
+        The circuit to sonify.
+    filename : str
+        Output WAV file path.
+    bpm : int
+        Beats per minute.
+    unroll_subcircuits : bool
+        Whether to unroll custom sub-circuits.
+    moments : list, optional
+        Pre-computed moments from ``circuit_to_moments``. If *None*,
+        moments are computed from *qc*.
     """
-    raw_moments = circuit_to_moments(qc, unroll_subcircuits=unroll_subcircuits)
+    if moments is None:
+        raw_moments = circuit_to_moments(qc, unroll_subcircuits=unroll_subcircuits)
+    else:
+        raw_moments = moments
     moments = _unroll_moments(raw_moments)
     
     sample_rate = 44100
@@ -252,4 +281,4 @@ def generate_audio(qc, filename="circuit_audio.wav", bpm=120, unroll_subcircuits
         wf.setframerate(sample_rate)
         wf.writeframes(audio_data.tobytes())
 
-    print(f"Audio saved to {filename}")
+    _log.info("Audio saved to %s", filename)

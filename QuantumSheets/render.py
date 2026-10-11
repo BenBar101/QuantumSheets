@@ -16,6 +16,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as mpatches
+from matplotlib.path import Path
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.textpath import TextPath
 from matplotlib.transforms import Affine2D
@@ -23,6 +24,7 @@ from matplotlib import font_manager
 
 from .layout import circuit_to_moments, GateEvent
 from .brace import draw_vertical_brace
+from .mapping import _SOLFEGE, _get_offset_for_name
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _CLEF_PATH = os.path.join(_HERE, "clef.png")
@@ -77,59 +79,29 @@ QLABEL_SIZE     = 42            # qubit label size – fills the staff top to bo
 FIGSIZE_SCALE   = 0.72          # data-units → inches conversion factor
 LEDGER_EXTENT   = NOTE_W * 0.7  # half-width of ledger lines
 
-# ── Solfège pitch mapping ─────────────────────────────────────────────
-_SOLFEGE = {
-    # Mi (bottom line)
-    "reset":  -2.0,
-    
-    # Fa (space above bottom line)
-    "rx":     -1.5,
-    "ry":     -1.5,
-    "rz":     -1.5,
-    "crx":    -1.5,
-    "cry":    -1.5,
-    "crz":    -1.5,
-    
-    # Sol (2nd line from bottom)
-    "x":      -1.0,
-    "y":      -1.0,
-    "z":      -1.0,
-    
-    # La (space below middle line)
-    "t":      -0.5,
-    "tdg":    -0.5,
-    
-    # Si (middle line)
-    "id":      0.0,
-    "u":       0.0,
-    "cu":      0.0,
-    
-    # Do (space above middle line)
-    "p":      +0.5,
-    "cp":     +0.5,
-    
-    # Re (4th line from bottom)
-    "h":      +1.0,
-    
-    # Mi (space below top line)
-    "s":      +1.5,
-    "sdg":    +1.5,
-    
-    # Fa (top line)
-    "sx":     +2.0,
-    "sxdg":   +2.0,
-}
+# Measurement symbol geometry
+MEAS_BAR_W       = 0.85          # measurement bar width
+MEAS_BAR_H_RATIO = 0.50          # measurement bar height as fraction of LINE_SPACING
+MEAS_FAN_OFFSET  = 0.55          # horizontal fan-out step per measurement
+MEAS_DX_OFFSET   = 0.35          # measurement x-offset as fraction of DX
 
-def _get_offset_for_name(name: str) -> float:
-    if name in _SOLFEGE:
-        return _SOLFEGE[name]
-    # Default behavior for anything unspecified
-    if name.startswith("r"):
-        return -1.5
-    return 0.0
+# Repeat barline geometry
+REPEAT_THICK_LW  = 4.5           # thick barline linewidth
+REPEAT_THIN_LW   = 1.2           # thin barline linewidth
+REPEAT_DOT_SIZE  = 4.5           # repeat dot marker size
+REPEAT_DOT_GAP   = 0.125         # vertical offset of repeat dots from center
 
 def _solfege_offset(ev: GateEvent) -> float:
     return _get_offset_for_name(ev.name)
+
+
+def _get_x_offset(kind: str, stem_dir: int) -> float:
+    """X-offset for a notehead so its visual centre aligns with the stem."""
+    if kind == "whole":
+        return stem_dir * (STEM_X_OFFSET - (WHOLE_W / 2.0))
+    elif kind == "x_note":
+        return stem_dir * (STEM_X_OFFSET - (NOTE_W * 0.4))
+    return 0.0
 
 # ── Helper: draw a notehead patch ────────────────────────────────────
 
@@ -189,9 +161,11 @@ def _draw_stem(ax, stem_x, y_bottom, y_top, ink="#1a1a1a"):
     ax.add_patch(rect)
 
 def _draw_flag(ax, stem_x, stem_top, ink="#1a1a1a"):
-    """Draw a classical eighth-note flag curving down from the top of the stem."""
-    from matplotlib.path import Path
+    """Draw a classical eighth-note flag curving down from the top of the stem.
     
+    NOTE: Currently unused — retained for future eighth-note rendering.
+    Called via ``_notehead(..., flag=True)``.
+    """
     verts = [
         (0.0, 0.0),            # Start at top-right of stem
         (0.9, 0.2),            # Thick curved top
@@ -221,8 +195,8 @@ def _draw_measure_symbol(ax, x, y, ink="#1a1a1a"):
     Draw a measurement symbol: a wide, short black rectangle (like the
     classical long-rest / breve-rest bar) with bold 'M' above it.
     """
-    bar_w = 0.85   # wide
-    bar_h = LINE_SPACING * 0.50  # short – ratio makes it look like a long rest
+    bar_w = MEAS_BAR_W   # wide
+    bar_h = LINE_SPACING * MEAS_BAR_H_RATIO  # short – ratio makes it look like a long rest
     rect = mpatches.FancyBboxPatch(
         (x - bar_w / 2, y - bar_h / 2), bar_w, bar_h,
         boxstyle="square,pad=0", facecolor=ink, edgecolor=ink,
@@ -366,22 +340,13 @@ class StaffCircuitDrawer:
 
     # ---------- note drawing ----------
 
-    def _notehead(self, ax, x, y, qubit, sys_idx, kind="black", stem=True, flag=False, gate_label=None):
-        """
-        Draw a notehead with an optional stem and gate label.
-        Gate labels are placed to the RIGHT of the notehead.
-        Ledger lines are drawn if the note falls outside the 5 staff lines.
-        """
+    def _draw_ledger_lines(self, ax, x, y, qubit, sys_idx):
+        """Draw ledger lines above or below the staff when a note falls outside."""
         ink = self.style["ink"]
-
-        # 1. Draw ledger lines if necessary
         top_line = self._staff_top_y(qubit, sys_idx)
         bot_line = self._staff_bottom_y(qubit, sys_idx)
-        
-        # A tiny bit of margin for floating point inaccuracies
         eps = 1e-4
         if y > top_line + eps:
-            # Note is above staff
             cur_y = top_line + LINE_SPACING
             while cur_y <= y + eps:
                 ax.plot([x - LEDGER_EXTENT, x + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
@@ -392,18 +357,22 @@ class StaffCircuitDrawer:
                 ax.plot([x - LEDGER_EXTENT, x + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
                 cur_y -= LINE_SPACING
 
+    def _notehead(self, ax, x, y, qubit, sys_idx, kind="black", stem=True, flag=False, gate_label=None):
+        """
+        Draw a notehead with an optional stem and gate label.
+        Gate labels are placed to the RIGHT of the notehead.
+        Ledger lines are drawn if the note falls outside the 5 staff lines.
+        """
+        ink = self.style["ink"]
+
+        # 1. Draw ledger lines if necessary
+        self._draw_ledger_lines(ax, x, y, qubit, sys_idx)
+
         # 2. Draw actual notehead
         # Determine stem direction based on classical music rules
         # If the note is above the middle line, stem goes down.
         mid_y = self._mid_y(qubit, sys_idx)
         stem_dir = -1 if y > mid_y else 1
-        
-        def _get_x_offset(k):
-            if k == "whole":
-                return stem_dir * (STEM_X_OFFSET - (WHOLE_W / 2.0))
-            elif k == "x_note":
-                return stem_dir * (STEM_X_OFFSET - (NOTE_W * 0.4))
-            return 0.0
 
         if kind == "measure":
             hx = 0.24
@@ -411,7 +380,7 @@ class StaffCircuitDrawer:
             ax.plot([x - hx, x + hx], [y - hy, y + hy], color=ink, lw=2.8, zorder=8)
             ax.plot([x - hx, x + hx], [y + hy, y - hy], color=ink, lw=2.8, zorder=8)
         else:
-            x_off = _get_x_offset(kind)
+            x_off = _get_x_offset(kind, stem_dir)
             _draw_notehead(ax, x, y, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
 
         if stem and kind not in ("whole",):
@@ -473,28 +442,9 @@ class StaffCircuitDrawer:
             stem_x = x_note + stem_offset
             stem_xs.append(stem_x)
 
-            top_line = self._staff_top_y(q, sys_idx)
-            bot_line = self._staff_bottom_y(q, sys_idx)
-            eps = 1e-4
-            if y_note > top_line + eps:
-                cur_y = top_line + LINE_SPACING
-                while cur_y <= y_note + eps:
-                    ax.plot([x_note - LEDGER_EXTENT, x_note + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
-                    cur_y += LINE_SPACING
-            elif y_note < bot_line - eps:
-                cur_y = bot_line - LINE_SPACING
-                while cur_y >= y_note - eps:
-                    ax.plot([x_note - LEDGER_EXTENT, x_note + LEDGER_EXTENT], [cur_y, cur_y], color=ink, lw=0.8, zorder=1)
-                    cur_y -= LINE_SPACING
+            self._draw_ledger_lines(ax, x_note, y_note, q, sys_idx)
 
-            def _get_x_offset(k):
-                if k == "whole":
-                    return stem_dir * (STEM_X_OFFSET - (WHOLE_W / 2.0))
-                elif k == "x_note":
-                    return stem_dir * (STEM_X_OFFSET - (NOTE_W * 0.4))
-                return 0.0
-            
-            x_off = _get_x_offset(kind)
+            x_off = _get_x_offset(kind, stem_dir)
             _draw_notehead(ax, x_note, y_note, kind=kind, ink=ink, bg=self.style["bg"], x_offset=x_off)
             
             if kind == "x_note":
@@ -610,8 +560,6 @@ class StaffCircuitDrawer:
         if len(digits) == 1:
             path_n = TextPath((0, 0), digits, size=1, prop={'family': 'serif', 'weight': 'bold'})
         else:
-            from matplotlib.path import Path
-            import numpy as np
             all_verts = []
             all_codes = []
             x_offset = 0
@@ -668,7 +616,8 @@ class StaffCircuitDrawer:
         x = self.system_xs[sys_idx][local_i]
         
         if ev.kind == "rest":
-            # Draw a quarter rest (1/4 pause symbol) using Bravura font
+            # NOTE: No layout producer currently emits rest events.
+            # Retained for external use or future idle-qubit rendering.
             y_line = self._mid_y(ev.qubits[0], sys_idx)
             if _BRAVURA_AVAILABLE:
                 ax.text(x, y_line, "\uE4E4", fontproperties=_BRAVURA_PROP,
@@ -688,14 +637,14 @@ class StaffCircuitDrawer:
             y_bot = self._y_of(max(ev.targets), sys_idx, -2.0)
             
             # Thick and thin barlines
-            ax.plot([x-0.1, x-0.1], [y_top, y_bot], color=ink, lw=4.5, zorder=8)
-            ax.plot([x+0.05, x+0.05], [y_top, y_bot], color=ink, lw=1.2, zorder=8)
+            ax.plot([x-0.1, x-0.1], [y_top, y_bot], color=ink, lw=REPEAT_THICK_LW, zorder=8)
+            ax.plot([x+0.05, x+0.05], [y_top, y_bot], color=ink, lw=REPEAT_THIN_LW, zorder=8)
             
             # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x+0.25, y_c + 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
-                ax.plot(x+0.25, y_c - 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c + REPEAT_DOT_GAP, marker='o', markersize=REPEAT_DOT_SIZE, color=ink, zorder=8)
+                ax.plot(x+0.25, y_c - REPEAT_DOT_GAP, marker='o', markersize=REPEAT_DOT_SIZE, color=ink, zorder=8)
             return
 
         if ev.kind == "repeat_end":
@@ -703,14 +652,14 @@ class StaffCircuitDrawer:
             y_bot = self._y_of(max(ev.targets), sys_idx, -2.0)
             
             # Thin and thick barlines
-            ax.plot([x+0.1, x+0.1], [y_top, y_bot], color=ink, lw=4.5, zorder=8)
-            ax.plot([x-0.05, x-0.05], [y_top, y_bot], color=ink, lw=1.2, zorder=8)
+            ax.plot([x+0.1, x+0.1], [y_top, y_bot], color=ink, lw=REPEAT_THICK_LW, zorder=8)
+            ax.plot([x-0.05, x-0.05], [y_top, y_bot], color=ink, lw=REPEAT_THIN_LW, zorder=8)
             
             # Dots in the spaces between lines
             for q in ev.targets:
                 y_c = self._y_of(q, sys_idx, 0.0)
-                ax.plot(x-0.25, y_c + 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
-                ax.plot(x-0.25, y_c - 0.125, marker='o', markersize=4.5, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c + REPEAT_DOT_GAP, marker='o', markersize=REPEAT_DOT_SIZE, color=ink, zorder=8)
+                ax.plot(x-0.25, y_c - REPEAT_DOT_GAP, marker='o', markersize=REPEAT_DOT_SIZE, color=ink, zorder=8)
                 
             # Text indicating iterations
             label = ev.label if ev.label else "2"
@@ -749,10 +698,10 @@ class StaffCircuitDrawer:
             offset = 0.0
             if len(meas_events) > 1:
                 meas_events_sorted = sorted(meas_events, key=lambda e: e.targets[0])
-                idx = meas_events_sorted.index(ev)
-                offset = idx * 0.55
+                idx = next(i for i, e in enumerate(meas_events_sorted) if e is ev)
+                offset = idx * MEAS_FAN_OFFSET
 
-            x_meas = x + DX * 0.35 + offset
+            x_meas = x + DX * MEAS_DX_OFFSET + offset
             _draw_measure_symbol(ax, x_meas, y, ink=ink)
             if self.qc.num_clbits > 0:
                 c_y = self._crescendo_y_center(sys_idx)
@@ -891,8 +840,15 @@ class StaffCircuitDrawer:
 
 def draw_circuit(qc, filename=None, style="clean", max_cols_per_system=36,
                  title=None, dpi=100, strip=False, unroll_subcircuits=True):
+    """Render a quantum circuit as sheet music.
+    
+    Returns the matplotlib Figure. When *filename* is given the figure is
+    saved and then closed to free memory; the (now closed) figure is still
+    returned for inspection but cannot be displayed.
+    """
     drawer = StaffCircuitDrawer(qc, style=style, max_cols_per_system=max_cols_per_system, title=title, strip=strip, unroll_subcircuits=unroll_subcircuits)
     fig = drawer.draw(dpi=dpi)
     if filename:
         fig.savefig(filename, facecolor=fig.get_facecolor(), bbox_inches="tight")
+        plt.close(fig)
     return fig

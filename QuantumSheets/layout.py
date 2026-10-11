@@ -12,8 +12,12 @@ This file has no matplotlib / drawing code in it on purpose, so it can
 be unit-tested or reused by a different renderer later.
 """
 import math
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
+
+from qiskit.converters import circuit_to_dag
+from qiskit.circuit.controlflow import ForLoopOp, WhileLoopOp
 
 
 @dataclass
@@ -46,14 +50,9 @@ def _fmt_one_param(p):
     import sympy
     from qiskit.circuit import ParameterExpression
     if isinstance(p, ParameterExpression):
-        # Format ParameterExpression nicely using sympy
         expr = p.sympify()
-        import numpy as np
-        expr = expr.subs(float(np.pi), sympy.pi)
-        expr = expr.subs(-float(np.pi), -sympy.pi)
-        expr = expr.subs(float(np.pi)/2, sympy.pi/2)
-        expr = expr.subs(-float(np.pi)/2, -sympy.pi/2)
-        expr = sympy.nsimplify(expr, rational=True)
+        # Let nsimplify recognise π automatically
+        expr = sympy.nsimplify(expr, rational=False, tolerance=1e-6)
         return str(expr).replace('pi', 'π').replace('*', '')
 
     try:
@@ -87,18 +86,18 @@ def _fmt_one_param(p):
     return f"{val:.2f}"
 
 
-def _fmt_params(params):
+def _fmt_params(params) -> str:
     return ",".join(_fmt_one_param(p) for p in params)
 
 
-def _pretty_label(name, params):
+def _pretty_label(name: str, params) -> str:
     base = _PRETTY.get(name, name.upper())
     if name in _PARAM_GATES and params:
         base = f"{base}({_fmt_params(params)})"
     return base
 
 
-def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
+def circuit_to_moments(qc, unroll_subcircuits: bool = True) -> List[List[GateEvent]]:
     """
     Greedily packs qc.data into moments (columns), one gate per wire per
     column, mirroring how standard circuit diagrams (and qiskit's own
@@ -108,9 +107,6 @@ def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
     n_qubits = qc.num_qubits
     next_free_col = [0] * n_qubits
     events = []
-
-    from qiskit.converters import circuit_to_dag
-    from qiskit.circuit.controlflow import ForLoopOp, WhileLoopOp
 
     STANDARD_GATES = {'x', 'y', 'z', 'h', 's', 'sdg', 't', 'tdg', 'rx', 'ry', 'rz', 'rzz', 'cx', 'cy', 'cz', 'cp', 'swap', 'iswap', 'ccx', 'cswap', 'measure', 'barrier', 'delay', 'reset', 'p', 'u', 'u1', 'u2', 'u3', 'crx', 'cry', 'crz', 'cu'}
 
@@ -243,7 +239,6 @@ def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
             ev_label = f"{ev_label}({params_str})"
             
         # Determine gate padding (how many extra columns it needs on each side)
-        import re
         visual_label = re.sub(r'\\[a-zA-Z]+', '', ev_label) # remove \ commands like \dagger, \pi, \pm
         visual_label = re.sub(r'[\$\{\}\\\^]', '', visual_label) # remove $, {, }, \, ^
         
@@ -285,5 +280,9 @@ def circuit_to_moments(qc, unroll_subcircuits=True) -> List[List[GateEvent]]:
     
     for c, ev in events:
         moments[c].append(ev)
+
+    # Strip trailing empty moments to avoid wasted horizontal space
+    while moments and not moments[-1]:
+        moments.pop()
 
     return moments
